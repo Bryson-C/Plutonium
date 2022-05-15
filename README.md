@@ -9,5 +9,5 @@ I will also not be explaining build systems because I myself am terrible at them
 - [Vulkan SDK](https://vulkan.lunarg.com/) (I will be using Vulkan 1.2. 1.3 should still work though)
  
 
-## Instance
+## Creating Vulkan Objects
 - [Creating Instances](https://github.com/Bryson-C/Plutonium/blob/main/Instance.md)
