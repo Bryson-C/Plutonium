@@ -24,6 +24,8 @@ To create an instance you need the following information before calling the crea
 To create the instance once all the information has been passed to the `VkInstanceCreateInfo` structure call the `vkCreateInstance` function
 
 ```c
+   // Note that VK_NULL_HANDLE is the Vulkan handle for NULL/nullptr, I will typically be using VK_NULL_HANDLE
+
     typedef uint32_t U32;
 
     VkApplicationInfo appInfo;
@@ -60,5 +62,8 @@ To create the instance once all the information has been passed to the `VkInstan
     if (InstanceCreationResult != VK_SUCCESS) { 
       // this indicates the instance was built incorrectly, however most of the time (in my expireince it will just throw a runtime error at the creation function)
     }
+    
+    // you can then destroy the instance with
+    vkDestroyInstance(Instance, VK_NULL_HANDLE);
 ```
 
