@@ -15,6 +15,7 @@ To create both devices you will need to define some structures
 | VkDeviceCreateInfo | Collection Of Structures To Describe How The Device Will Be Made | - | ✔️ Yes |
 
 To create the devices you will first want to create the `VkPhysicalDevice`
+
 ```c
     U32 deviceCount = 0;
     vkEnumeratePhysicalDevices(Instance, &deviceCount, VK_NULL_HANDLE);
@@ -32,11 +33,13 @@ To create the devices you will first want to create the `VkPhysicalDevice`
     }
     free(devices); // not sure if this is good, but it didnt effect my program
 ```
+
 With our newly found physical device we can now proceed to the logical device
 
 However we will need queues first
 
 To explain queues, I will be showing this image (which is an example, this should not be used for professionals)
+
 ![Queue](https://github.com/Bryson-C/Plutonium/blob/main/IfYouUseThisProfessionallyYouAreADumbass_Queues.png)
 
 
@@ -71,6 +74,8 @@ To explain queues, I will be showing this image (which is an example, this shoul
     
     U32 GraphicsFamily; // QueueFamily for graphics queue
     U32 GraphicsIndex; // The index of the graphics queue inside of the queue family
+    VkQueue GraphicsQueue; // The actual Vulkan queue
+    
     for (U32 i = 0; i < queueFamilyCount; i++) {
         if (queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) { // we only need a queue capable of graphics hence why we are only looking for queues with the graphics flag
             GraphicsFamily = i; // we will save the queue family
@@ -83,5 +88,55 @@ To explain queues, I will be showing this image (which is an example, this shoul
 ```
 
 Finally we will be able to create a logical device
+
 ```c
+    // we will start out by hard coding our queue info (this is not how I would do it but it is signifigantly easier)
+    const float graphicsPriority = 1.0f;
+
+    VkDeviceQueueCreateInfo graphicsInfo;
+    graphicsInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    graphicsInfo.pNext = VK_NULL_HANDLE;
+    graphicsInfo.flags = 0;
+    graphicsInfo.queueFamilyIndex = GraphicsFamily; // the family which the queue belongs to
+    graphicsInfo.queueCount = 1; // we only wanted 1 queue from the family
+    graphicsInfo.pQueuePriorities = &graphicsPriority; // Im not entirely sure how this works. the Vulkan spec states "normalized floating point values, specifying priorities of work that will be submitted to each created queue"
+    
+    // next we want extensions and layers for the device (which are also hard coded because I suck at string arrays)
+    
+    const char* deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    U32 deviceExtensionCount = 1;
+    const char** deviceLayers = VK_NULL_HANDLE;
+    U32 deviceLayerCount = 0;
+    
+    // we may now create the device info
+    
+    VkDeviceCreateInfo deviceInfo;
+    deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    deviceInfo.pNext = VK_NULL_HANDLE;
+    deviceInfo.flags = 0;
+    deviceInfo.queueCreateInfoCount = 1;
+    deviceInfo.pQueueCreateInfos = &graphicsInfo;
+    deviceInfo.ppEnabledLayerNames = deviceLayers;
+    deviceInfo.enabledLayerCount = deviceLayerCount;
+    deviceInfo.enabledExtensionCount = deviceExtensionCount;
+    deviceInfo.ppEnabledExtensionNames = deviceExtensions;
+    deviceInfo.pEnabledFeatures = VK_NULL_HANDLE; // this will likely be used later I just happen to be lazy
+    
+    VkDevice Device;
+    VkResult DeviceCreationResult = vkCreateDevice(PhysicalDevice, &deviceInfo, VK_NULL_HANDLE, &Device);
+    if (DeviceCreationResult != VK_SUCCESS) {} // Do something if the device was created incorrectly (I typical skip this until it becomes a problem)
+    
+    // the final step is checking if the queue can present and aquiring the queue
+    // you will need a VkSurfaceKHR object to check this. This is compeletly optional
+    
+    vkGetDeviceQueue(Device, GraphicsFamily, GraphicsIndex, &GraphicsQueue);
+    
+    VkBool32 graphicsQueueCanPresent = VK_FALSE;
+    vkGetPhysicalDeviceSurfaceSupportKHR(PhysicalDevice, GraphicsFamily, Surface, &graphicsQueueCanPresent);
+    if (graphicsQueueCanPresent != VK_TRUE) {
+        printf("Queue Not Capable Of Presentation\n");
+    }
+    
+    
 ```
+
