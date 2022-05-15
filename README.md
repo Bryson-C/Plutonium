@@ -19,7 +19,7 @@ To create an instance you need the following information before calling the crea
 | VkApplicationInfo | Application Information | Used for information such as engine and app name as well as Vulkan version | ❎ No |
 | VkInstanceCreateInfo | All Information Structure Bound To Another Structure | Used to attach other information structures such as VkApplicationInfo to be used for creation | ❎ No |
 | const char** | Used For Instance Extensions And Layers | Used to be attached to the VkInstanceCreateInfo structure for creation | ❔Somewhat |
-| VkDebugUtilsMessengerCreateInfoEXT* | Used For Validation Layers | Used to set up validation layers to debug the entirety of Vulkan during runtime | ✔ Yes (Heavily Adviced) |
+| VkDebugUtilsMessengerCreateInfoEXT* | Used For Validation Layers | Used to set up validation layers to debug the entirety of Vulkan during runtime | ✔ Yes (Heavily Suggested) |
 
 To create the instance once all the information has been passed to the `VkInstanceCreateInfo` structure call the `vkCreateInstance` function
 
@@ -48,10 +48,11 @@ To create the instance once all the information has been passed to the `VkInstan
     instanceInfo.pNext = VK_NULL_HANDLE; // To Be Used Later For Validation Layers
     instanceInfo.flags = 0;
     instanceInfo.pApplicationInfo = &appInfo;
-    instanceInfo.ppEnabledExtensionNames = extensions;
-    instanceInfo.enabledLayerCount = layerCount;
-    instanceInfo.ppEnabledLayerNames = layers;
-    instanceInfo.enabledExtensionCount = extensionCount;
+    instanceInfo.ppEnabledExtensionNames = extensions; // can be VK_NULL_HANDLE or NULL if you dont need extensions
+    instanceInfo.enabledExtensionCount = extensionCount; // if extensions are VK_NULL_HANDLE or NULL this must be 0
+    instanceInfo.ppEnabledLayerNames = layers; // if layers are VK_NULL_HANDLE or NULL this must be 0
+    instanceInfo.enabledLayerCount = layerCount; // can be VK_NULL_HANDLE or NULL if you dont need layers
+
     
     // You may now finally create your instance
     VkInstance Instance;
