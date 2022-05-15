@@ -1,8 +1,9 @@
-# Plutonium | Vulkan In C
+# Plutonium - Vulkan In C
 
 ## Disclaimer
 Im coming from a C++ background but im trying my best to spread information thats helped me. That being said I do not know best practices.
 I will also not be explaining build systems because I myself am terrible at them.
+I may also forget something or mispell some things so keep that in mind
 
 ## Libraries
 - [GLFW](https://www.glfw.org/)
