@@ -41,10 +41,47 @@ To explain queues, I will be showing this image (which is an example, this shoul
 
 
 ```c
+   // Define this function for readability of queue flags. This is optional though
+    void printQueueFlags(VkQueueFamilyProperties family) {
+        if (family.queueFlags & VK_QUEUE_GRAPHICS_BIT) { printf(" Graphics "); }
+        if (family.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) { printf(" Sparse Binding "); }
+        if (family.queueFlags & VK_QUEUE_TRANSFER_BIT) { printf(" Transfer "); }
+        if (family.queueFlags & VK_QUEUE_COMPUTE_BIT) { printf(" Compute "); }
+    }
+    
+
     // first we need to find a queue so some functions can be used later
     // much like finding the graphics card the function is called twice, first for the queue family count, next for filling the memory with valid data
     U32 queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &queueFamilyCount, VK_NULL_HANDLE);
+    vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &queueFamilyCount, VK_NULL_HANDLE); 
+    // last parameter is VK_NULL_HANDLE so that the function will return the family count
     VkQueueFamilyProperties* queueFamilyProperties = malloc(sizeof(VkQueueFamilyProperties) * queueFamilyCount);
+    // allocating space for queue family data
     vkGetPhysicalDeviceQueueFamilyProperties(PhysicalDevice, &queueFamilyCount, queueFamilyProperties);
+    // filling queueFamilyProperties with valid queue data
+    
+    // now we can go through the queue families and select what we need (this is not required, it is used to visualize queue families better)
+    for (U32 i = 0; i < queueFamilyCount; i++) {
+        printf("Queue Family: %i \n\tFamily Has %i Queues\n\tFamily Is Capable Of: ", i, queueFamilyProperties[i].queueCount);
+        printQueueFlags(queueFamilyProperties[i]); // using previously defined function for readability, queueFamilyProperties[i].queueFlags can be printed as a int though
+        printf("\n");
+    }
+    // this will give you a nice view of your graphics cards capabilites of queues
+    // we will now select a queue for graphics purposes
+    
+    U32 GraphicsFamily; // QueueFamily for graphics queue
+    U32 GraphicsIndex; // The index of the graphics queue inside of the queue family
+    for (U32 i = 0; i < queueFamilyCount; i++) {
+        if (queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) { // we only need a queue capable of graphics hence why we are only looking for queues with the graphics flag
+            GraphicsFamily = i; // we will save the queue family
+            GraphicsIndex = 0; // since we only need 1 queue, the index will always be 0
+            break; // we are only looking for 1 queue so once we find it we can just exit the loop
+        }
+    }
+    
+    free(queueFamilyProperties); // we can now free the queue family properties as we will no longer be using them
+```
+
+Finally we will be able to create a logical device
+```c
 ```
