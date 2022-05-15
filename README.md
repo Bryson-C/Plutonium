@@ -15,7 +15,7 @@ An instance in Vulkan is like the entry point for the graphics api.
 To create an instance you need the following information before calling the creation function:
 
 | Structure | Use | Description | Optional |
-| -- | -- |
+| -- | -- | -- | -- |
 | VkApplicationInfo | Application Information | Used for information such as engine and app name as well as Vulkan version | ❎ No |
 | VkInstanceCreateInfo | All Information Structure Bound To Another Structure | Used to attach other information structures such as VkApplicationInfo to be used for creation | ❎ No |
 | const char** | Used For Instance Extensions And Layers | Used to be attached to the VkInstanceCreateInfo structure for creation | ❔Somewhat |
