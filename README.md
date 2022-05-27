@@ -1,4 +1,4 @@
-# Plutonium - Vulkan In C
+# Plutonium - Vulkan In C (To Be Used As A Learning Tool)
 
 ## Disclaimer
 Im coming from a C++ background but im trying my best to spread information thats helped me. That being said I do not know best practices.
