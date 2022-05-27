@@ -7,7 +7,7 @@ I may also forget something or mispell some things so keep that in mind
 
 ## Libraries
 - [GLFW](https://www.glfw.org/)
-- [Vulkan SDK](https://vulkan.lunarg.com/) (I will be using Vulkan 1.2. 1.3 should still work though)
+- [Vulkan SDK](https://vulkan.lunarg.com/) (I will be using Vulkan 1.2; 1.3 should still work though)
  
 
 ## Creating Vulkan Objects
