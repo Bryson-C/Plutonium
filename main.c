@@ -2,7 +2,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <windows.h>
+#include <time.h>
+#include <math.h>
 
 #include "Abstraction/Abstractions.h"
 
@@ -48,11 +49,10 @@ const char* shaderCompilationErrorCodeToString(int errorCode) {
 
 typedef struct {
     float x,y,z;
-    VkFormat format;
 } Float3;
 
 Float3 newFloat3(const float x, const float y, const float z) {
-    Float3 f = {.x = x, .y = y, .z = z, VK_FORMAT_R32G32B32_SFLOAT};
+    Float3 f = {.x = x, .y = y, .z = z};
     return f;
 }
 
@@ -61,6 +61,10 @@ typedef struct {
     Float3 pos;
     Float3 col;
 } vertex;
+
+typedef struct {
+    Float3 xyz;
+} UBO;
 
 
 void printQueueFlags(VkQueueFamilyProperties family) {
@@ -122,10 +126,6 @@ int main() {
     Swapchain Swapchain = createSwapchain(Device, PhysicalDevice, Surface, SwapchainExtent, GraphicsIndices.familyIndex, 1);
     FramebufferContainer Framebuffers = createFramebufferInfo(Device, &Swapchain);
 
-
-
-
-    // TODO: Create Swapchain Depth Buffer
 
 
     Float3 softBlue = newFloat3(0.1f,0.3f,1.0f);
@@ -226,7 +226,99 @@ int main() {
     VkScissor scissor = createScissor(Swapchain.extent);
     VkPipelineViewportStateCreateInfo viewportState = createViewportState(viewport, scissor);
 
-    VkPipelineLayout pipelineLayout  = createPipelineLayout(Device, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE);
+
+
+
+
+    U32 descriptorSetRequestCount = backBuffers;
+
+    UniformBuffer* UniformBuffers = createUniformBuffers(Device, descriptorSetRequestCount, sizeof(UBO), TransferIndices.familyIndex);
+    VkDescriptorBufferInfo* bufferInfo = malloc(sizeof(VkDescriptorBufferInfo) * descriptorSetRequestCount);
+
+    // TODO: Descriptor Sets
+/*
+    VkDescriptorSetLayoutBinding uniformBinding = createNewBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, backBuffers, VK_SHADER_STAGE_VERTEX_BIT);
+    VkDescriptorSetLayout layout = createDescriptorLayout(Device, 1, &uniformBinding);
+
+    VkDescriptorPool descriptorPool = createDescriptorPool(Device, backBuffers, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+
+    VkDescriptorSetLayout descriptorLayouts[] = {layout, layout};
+    VkDescriptorSet* descriptorSets = createDescriptorSet(Device, backBuffers, descriptorLayouts, descriptorPool);
+
+
+    writeDescriptor(Device, descriptorSets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufferInfo[0], VK_NULL_HANDLE);
+    writeDescriptor(Device, descriptorSets[1], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &bufferInfo[1], VK_NULL_HANDLE);
+*/
+
+
+    U32 descriptorBindingCount = 1;
+    VkDescriptorSetLayoutBinding uniformBinding;
+    uniformBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uniformBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uniformBinding.descriptorCount = descriptorSetRequestCount;
+    uniformBinding.binding = 0;
+    uniformBinding.pImmutableSamplers = VK_NULL_HANDLE;
+
+    VkDescriptorSetLayout layout;
+    VkDescriptorSetLayoutCreateInfo descriptorLayoutInfo;
+    descriptorLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorLayoutInfo.pNext = VK_NULL_HANDLE;
+    descriptorLayoutInfo.flags = 0;
+    descriptorLayoutInfo.bindingCount = descriptorBindingCount;
+    descriptorLayoutInfo.pBindings = &uniformBinding;
+
+    vkCreateDescriptorSetLayout(Device, &descriptorLayoutInfo, VK_NULL_HANDLE, &layout);
+
+    VkDescriptorPool descriptorPool;
+
+    U32 descriptorPoolSizeCount = 1;
+    VkDescriptorPoolSize descriptorPoolSize;
+    descriptorPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorPoolSize.descriptorCount = descriptorSetRequestCount;
+
+    VkDescriptorPoolCreateInfo poolInfo;
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.pNext = VK_NULL_HANDLE;
+    poolInfo.flags = 0;
+    poolInfo.maxSets = descriptorSetRequestCount;
+    poolInfo.poolSizeCount = descriptorPoolSizeCount;
+    poolInfo.pPoolSizes = &descriptorPoolSize;
+
+    vkCreateDescriptorPool(Device, &poolInfo, VK_NULL_HANDLE, &descriptorPool);
+
+    VkDescriptorSetLayout* descriptorLayoutArray = malloc(sizeof(VkDescriptorSetLayout) * descriptorSetRequestCount);
+    for (U32 i = 0; i < descriptorSetRequestCount; i++) descriptorLayoutArray[i] = layout;
+
+    VkDescriptorSetAllocateInfo descriptorAllocInfo;
+    descriptorAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorAllocInfo.pNext = VK_NULL_HANDLE;
+    descriptorAllocInfo.pSetLayouts = descriptorLayoutArray;
+    descriptorAllocInfo.descriptorSetCount = descriptorSetRequestCount;
+    descriptorAllocInfo.descriptorPool = descriptorPool;
+
+    VkDescriptorSet* descriptorSets = malloc(sizeof(VkDescriptorSet) * descriptorSetRequestCount);
+    vkAllocateDescriptorSets(Device, &descriptorAllocInfo, descriptorSets);
+
+    free(descriptorLayoutArray);
+
+    for (U32 i = 0; i < descriptorSetRequestCount; i++) {
+        VkWriteDescriptorSet write;
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.pNext = VK_NULL_HANDLE;
+        write.dstSet = descriptorSets[i];
+        write.dstBinding = 0; // if this was an array it would not stay at zero (keep this in mind)
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write.pImageInfo = VK_NULL_HANDLE;
+        write.pBufferInfo = &UniformBuffers[i].bufferInfo;
+        write.pTexelBufferView = VK_NULL_HANDLE;
+
+        vkUpdateDescriptorSets(Device, 1, &write, 0, VK_NULL_HANDLE);
+    }
+
+
+    VkPipelineLayout pipelineLayout  = createPipelineLayout(Device, 0, VK_NULL_HANDLE, 1, &layout);
 
     VkPipelineRasterizationStateCreateInfo rasterizer = createRasterizer(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE, 1.0f);
 
@@ -427,39 +519,32 @@ int main() {
         glfwPollEvents();
 
 
-
         U32 imageIndex = 0;
         vkAcquireNextImageKHR(Device, Swapchain.swapchain, UINT64_MAX, waitSemaphores[frame], VK_NULL_HANDLE, &imageIndex);
-
-
-        VkRenderPassBeginInfo beginfo;
-        beginfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        beginfo.pNext = VK_NULL_HANDLE;
-        beginfo.renderPass = RenderPass;
-        beginfo.framebuffer = Framebuffers.framebuffer[imageIndex];
-        beginfo.renderArea = scissor;
-        beginfo.clearValueCount = clearCount;
-        beginfo.pClearValues = clears;
-
-        VkCommandBufferBeginInfo cmdBeginfo;
-        cmdBeginfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        cmdBeginfo.pNext = VK_NULL_HANDLE;
-        cmdBeginfo.flags = 0;
-        cmdBeginfo.pInheritanceInfo = VK_NULL_HANDLE;
-
 
         vkWaitForFences(Device, 1, &renderFence[frame], VK_TRUE, UINT64_MAX);
         vkResetFences(Device, 1, &renderFence[frame]);
 
 
-        vkBeginCommandBuffer(CommandBuffers[imageIndex], &cmdBeginfo);
-        vkCmdBeginRenderPass(CommandBuffers[imageIndex], &beginfo, VK_SUBPASS_CONTENTS_INLINE);
+        float value = ((float) sin((double)clock()/1000) / 2.0f) + 0.6f;
+        UBO uniformData;
+        uniformData.xyz = newFloat3(value, value, value);
+
+        void* uniformUpload;
+        vkMapMemory(Device, UniformBuffers[frame].memory, 0, sizeof(UBO), 0, &uniformUpload);
+        memcpy(uniformUpload, &uniformData, sizeof(UBO));
+        vkUnmapMemory(Device, UniformBuffers[frame].memory);
+
+
+        beginFrameRecording(&CommandBuffers[imageIndex], RenderPass, Framebuffers.framebuffer[imageIndex], scissor, clearCount, clears);
         vkCmdBindPipeline(CommandBuffers[imageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, GraphicsPipeline);
+        vkCmdBindDescriptorSets(CommandBuffers[imageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[frame], 0, VK_NULL_HANDLE);
         VkDeviceSize vertexBufferOffsets[] = {0};
         vkCmdBindVertexBuffers(CommandBuffers[imageIndex], 0, 1, &VertexBuffer.buffer, vertexBufferOffsets);
         vkCmdDraw(CommandBuffers[imageIndex], verticesPerShape, 1, 0, 0);
-        vkCmdEndRenderPass(CommandBuffers[imageIndex]);
-        vkEndCommandBuffer(CommandBuffers[imageIndex]);
+        endFrameRecording(&CommandBuffers[imageIndex]);
+
+
 
 
         VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -501,6 +586,12 @@ int main() {
 
     destroyBuffer(Device, &VertexBuffer);
 
+
+    vkDestroyDescriptorPool(Device, descriptorPool, VK_NULL_HANDLE);
+    vkDestroyDescriptorSetLayout(Device, layout, VK_NULL_HANDLE);
+    for (U32 i = 0; i < descriptorSetRequestCount; i++) {
+        destroyBuffer(Device, &UniformBuffers[i]);
+    }
 
 
     for (int i = 0; i < backBuffers; i++) {
