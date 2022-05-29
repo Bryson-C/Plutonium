@@ -39,15 +39,25 @@ VkCommandBuffer* createCommandBuffers(VkDevice device, VkCommandPool pool, U32 c
 
 // Buffers
 
-struct Buffer_t { VkBuffer buffer; VkDeviceMemory memory; };
+struct Buffer_t { VkBuffer buffer; VkDeviceMemory memory; VkDescriptorBufferInfo bufferInfo; };
 typedef struct Buffer_t Buffer;
+typedef struct Buffer_t UniformBuffer;
 
 Buffer createBuffer(VkDevice device, U32 queueFamily,
                     VkQueue queue, VkCommandBuffer commandBuffer,
                     VkFence fence, VkDeviceSize size,
                     VkBufferUsageFlagBits usageFlags, void* data);
 
+UniformBuffer* createUniformBuffers(VkDevice device, U32 count, VkDeviceSize size, U32 queueFamily);
+
+
+
 void destroyBuffer(VkDevice device, Buffer* buffer);
+
+
+
+
+
 
 // Swapchain
 
@@ -129,10 +139,25 @@ RenderPassAttachment createRenderPassAttachment(VkImageLayout finalLayout, VkIma
                                                 VkSampleCountFlags samples, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
                                                 VkAttachmentLoadOp stencilLoadOp, VkAttachmentStoreOp stencilStoreOp);
 
+// Descriptors
 
+VkDescriptorSetLayoutBinding createNewBinding(U32 slot, VkDescriptorType type, U32 count, VkShaderStageFlagBits stages);
+VkDescriptorPool createDescriptorPool(VkDevice device, U32 sets, VkDescriptorType type);
+VkDescriptorSetLayout createDescriptorLayout(VkDevice device, U32 bindingCount, VkDescriptorSetLayoutBinding* bindings);
+VkDescriptorSet* createDescriptorSet(VkDevice device, U32 count, VkDescriptorSetLayout* layouts, VkDescriptorPool pool);
+void writeDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
+
+
+void destroyDescriptorPool();
+void destroyDescriptorSets();
+void destroyDescriptorLayout();
 
 
 // TODO: ShaderC
 
+// Drawing
+
+void beginFrameRecording(VkCommandBuffer* buffer, VkRenderPass renderPass, VkFramebuffer framebuffer, VkScissor scissor, U32 clearCount, VkClearValue* clears);
+void endFrameRecording(VkCommandBuffer* buffer);
 
 #endif //PLUTONIUM_ABSTRACTIONS_H

@@ -247,8 +247,6 @@ uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
 Buffer createBuffer(VkDevice device, U32 queueFamily, VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence, VkDeviceSize size, VkBufferUsageFlagBits usageFlags, void* data) {
     Buffer Buffer, StagingBuffer;
 
-
-
     VkBufferCreateInfo stagingInfo;
     stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     stagingInfo.pNext = VK_NULL_HANDLE;
@@ -288,6 +286,10 @@ Buffer createBuffer(VkDevice device, U32 queueFamily, VkQueue queue, VkCommandBu
     bufferInfo.pQueueFamilyIndices = &queueFamily;
 
     vkCreateBuffer(device, &bufferInfo, VK_NULL_HANDLE, &Buffer.buffer);
+
+    Buffer.bufferInfo.buffer = Buffer.buffer;
+    Buffer.bufferInfo.range = size;
+    Buffer.bufferInfo.offset = 0;
 
     VkMemoryRequirements bufferRequirements;
     vkGetBufferMemoryRequirements(device, Buffer.buffer, &bufferRequirements);
@@ -335,6 +337,41 @@ Buffer createBuffer(VkDevice device, U32 queueFamily, VkQueue queue, VkCommandBu
 
     destroyBuffer(device, &StagingBuffer);
 
+    return Buffer;
+}
+
+UniformBuffer* createUniformBuffers(VkDevice device, U32 count, VkDeviceSize size, U32 queueFamily) {
+    UniformBuffer* Buffer = malloc(sizeof(UniformBuffer) * count);
+
+    VkBufferCreateInfo bufferInfo;
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.pNext = VK_NULL_HANDLE;
+    bufferInfo.flags = 0;
+    bufferInfo.size = size;
+    bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    bufferInfo.queueFamilyIndexCount = 1;
+    bufferInfo.pQueueFamilyIndices = &queueFamily;
+
+    for (U32 i = 0; i < count; i++) {
+        vkCreateBuffer(device, &bufferInfo, VK_NULL_HANDLE, &Buffer[i].buffer);
+
+        Buffer[i].bufferInfo.buffer = Buffer[i].buffer;
+        Buffer[i].bufferInfo.range = size;
+        Buffer[i].bufferInfo.offset = 0;
+
+        VkMemoryRequirements bufferRequirements;
+        vkGetBufferMemoryRequirements(device, Buffer[i].buffer, &bufferRequirements);
+
+        VkMemoryAllocateInfo bufferAlloc;
+        bufferAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        bufferAlloc.pNext = VK_NULL_HANDLE;
+        bufferAlloc.allocationSize = bufferRequirements.size;
+        bufferAlloc.memoryTypeIndex = findMemoryType(bufferRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+        vkAllocateMemory(device, &bufferAlloc, VK_NULL_HANDLE, &Buffer[i].memory);
+        vkBindBufferMemory(device, Buffer[i].buffer, Buffer[i].memory, 0);
+    }
     return Buffer;
 }
 
@@ -627,6 +664,7 @@ VkScissor createScissor(VkExtent2D extent) {
 }
 
 VkPipelineViewportStateCreateInfo createViewportState(VkViewport viewport, VkScissor scissor) {
+    // It is important to send local (to the main function) variables so that the memory is not un-initialized when the struct is returned
     VkPipelineViewportStateCreateInfo viewportState;
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.pNext = VK_NULL_HANDLE;
@@ -670,6 +708,87 @@ VkPipelineRasterizationStateCreateInfo createRasterizer(VkPolygonMode polygonMod
     return rasterizer;
 }
 
+// Descriptors
+
+VkDescriptorSetLayoutBinding createNewBinding(U32 slot, VkDescriptorType type, U32 count, VkShaderStageFlagBits stages) {
+    VkDescriptorSetLayoutBinding binding;
+    binding.binding = slot;
+    binding.descriptorType = type;
+    binding.descriptorCount = count;
+    binding.stageFlags = stages;
+    binding.pImmutableSamplers = VK_NULL_HANDLE;
+    return binding;
+}
+
+VkDescriptorPool createDescriptorPool(VkDevice device, U32 sets, VkDescriptorType type) {
+    VkDescriptorPool pool;
+
+    VkDescriptorPoolSize size;
+    size.type = type;
+    size.descriptorCount = sets;
+
+    VkDescriptorPoolCreateInfo poolInfo;
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.pNext = VK_NULL_HANDLE;
+    poolInfo.flags = 0;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &size;
+    poolInfo.maxSets = sets;
+
+    vkCreateDescriptorPool(device, &poolInfo, VK_NULL_HANDLE, &pool);
+    return pool;
+}
+
+VkDescriptorSetLayout createDescriptorLayout(VkDevice device, U32 bindingCount, VkDescriptorSetLayoutBinding* bindings) {
+    VkDescriptorSetLayout layout;
+    VkDescriptorSetLayoutCreateInfo layoutInfo;
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.pNext = VK_NULL_HANDLE;
+    layoutInfo.flags = 0;
+    layoutInfo.bindingCount = bindingCount;
+    layoutInfo.pBindings = bindings;
+
+    vkCreateDescriptorSetLayout(device, &layoutInfo, VK_NULL_HANDLE, &layout);
+    return layout;
+}
+
+VkDescriptorSet* createDescriptorSet(VkDevice device, U32 count, VkDescriptorSetLayout* layouts, VkDescriptorPool pool) {
+    VkDescriptorSet* sets = malloc(sizeof(VkDescriptorSet) * count);
+
+    VkDescriptorSetAllocateInfo allocInfo;
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.pNext = VK_NULL_HANDLE;
+    allocInfo.pSetLayouts = layouts;
+    allocInfo.descriptorSetCount = count;
+    allocInfo.descriptorPool = pool;
+
+
+    vkAllocateDescriptorSets(device, &allocInfo, sets);
+
+    vkDestroyDescriptorPool(device, pool, VK_NULL_HANDLE);
+    return sets;
+}
+
+void writeDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
+    VkWriteDescriptorSet write;
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.pNext = VK_NULL_HANDLE;
+    write.dstSet = set;
+    write.dstBinding = 0; // if this was an array it would not stay at zero (keep this in mind)
+    write.dstArrayElement = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = type;
+    write.pImageInfo = imageInfo;
+    write.pBufferInfo = bufferInfo;
+    write.pTexelBufferView = VK_NULL_HANDLE;
+
+    vkUpdateDescriptorSets(device, 1, &write, 0, VK_NULL_HANDLE);
+}
+
+
+
+
+// render pass
 RenderPassAttachment createRenderPassAttachment(VkImageLayout finalLayout, VkImageLayout imageType, U32 attachment, VkFormat format, VkSampleCountFlags samples,
                                                 VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
                                                 VkAttachmentLoadOp stencilLoadOp, VkAttachmentStoreOp stencilStoreOp) {
@@ -693,5 +812,33 @@ RenderPassAttachment createRenderPassAttachment(VkImageLayout finalLayout, VkIma
 void destroyShader(VkDevice device, ShaderFile* shader) {
     free(shader->buffer);
     vkDestroyShaderModule(device, shader->module, VK_NULL_HANDLE);
+}
+
+
+// Drawing
+
+void beginFrameRecording(VkCommandBuffer* buffer, VkRenderPass renderPass, VkFramebuffer framebuffer, VkScissor scissor, U32 clearCount, VkClearValue* clears) {
+    VkRenderPassBeginInfo beginfo;
+    beginfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    beginfo.pNext = VK_NULL_HANDLE;
+    beginfo.renderPass = renderPass;
+    beginfo.framebuffer = framebuffer;
+    beginfo.renderArea = scissor;
+    beginfo.clearValueCount = clearCount;
+    beginfo.pClearValues = clears;
+
+    VkCommandBufferBeginInfo cmdBeginfo;
+    cmdBeginfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cmdBeginfo.pNext = VK_NULL_HANDLE;
+    cmdBeginfo.flags = 0;
+    cmdBeginfo.pInheritanceInfo = VK_NULL_HANDLE;
+
+    vkBeginCommandBuffer(*buffer, &cmdBeginfo);
+    vkCmdBeginRenderPass(*buffer, &beginfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void endFrameRecording(VkCommandBuffer* buffer) {
+    vkCmdEndRenderPass(*buffer);
+    vkEndCommandBuffer(*buffer);
 }
 
