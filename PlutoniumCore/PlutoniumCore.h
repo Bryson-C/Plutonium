@@ -31,20 +31,70 @@ typedef struct {
     VkPhysicalDeviceFeatures features;
     VkPhysicalDeviceMemoryProperties memoryProperties;
 
+    PLCore_DeviceQueue graphicsQueue;
+    PLCore_DeviceQueue transferQueue;
+
     VkDevice device;
 } PLCore_Device;
 typedef struct {
-    PLCore_Instance instance;
-    PLCore_Device device;
+    VkCommandPool pool;                 // Buffer Allocator
+    VkCommandBuffer* buffers;           // Buffer Object Array
+} PLCore_CommandPool;
+typedef struct {
+    PLCore_Instance pl_instance;
+    PLCore_Device pl_device;
+
+    PLCore_CommandPool transferPool;
 } PLCore_RenderInstance;
+typedef struct {
+    VkSwapchainKHR swapchain;           // Framebuffer Organiser
+    VkPresentModeKHR presentMode;       // How The Framebuffers Are Presented
+    VkSurfaceFormatKHR surfaceFormat;   // The Format And Color Format That Is Used For Rendering
+    VkFormat depthFormat;               // Format Of The Depth Buffer For The Render Pass
+    VkExtent2D resolution;              // X,Y Dimensions Of The Screen
+} PLCore_Swapchain;
+typedef struct {
+    GLFWwindow* window;
+    VkSurfaceKHR surface;
+    VkExtent2D resolution;
+    VkViewport viewport;
+    VkRect2D renderArea;
+} PLCore_Window;
+typedef struct {
+    VkImage image;
+    VkImageView view;
+    VkDeviceMemory memory;
+} PLCore_Image;
+typedef struct {
+    VkSwapchainKHR swapchain;
+    VkImage* swapchainImages;
+    VkImageView* swapchainImageViews;
+    uint32_t swapchainImageCount;
+    PLCore_Image pl_depthImage;
+
+    VkRenderPass renderPass;
+
+    VkFramebuffer* framebuffers;
+    PLCore_CommandPool graphicsPool;
+
+
+} PLCore_Renderer;
 
 VkInstance          PLCore_Priv_CreateInstance(VkDebugUtilsMessengerEXT* messenger);
 VkPhysicalDevice    PLCore_Priv_CreatePhysicalDevice(VkInstance instance, uint32_t* queueFamilyCount, VkQueueFamilyProperties** queueFamilies);
 VkDevice            PLCore_Priv_CreateDevice(VkPhysicalDevice physicalDevice, uint32_t queueFamilyCount, VkQueueFamilyProperties* queueFamilyProperties, VkPhysicalDeviceFeatures features, uint32_t queueRequestCount, VkQueueFlagBits* queueRequest, PLCore_DeviceQueue** queues);
-VkRenderPass        PLCore_Priv_CreateRenderPass();
-VkSwapchainKHR      PLCore_Priv_CreateSwapchain();
+GLFWwindow*         PLCore_Priv_CreateWindow(VkInstance instance, uint32_t width, uint32_t height, VkSurfaceKHR* surface);
+VkRenderPass        PLCore_Priv_CreateRenderPass(VkDevice device, VkFormat presentableFormat, VkFormat depthFormat);
+VkCommandPool       PLCore_Priv_CreateCommandPool(VkDevice device, uint32_t queueFamily, VkCommandPoolCreateFlagBits flags);
+VkCommandBuffer*    PLCore_Priv_CreateCommandBuffers(VkDevice device, VkCommandPool pool, uint32_t count);
+VkSwapchainKHR      PLCore_Priv_CreateSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkExtent2D screenResolution, uint32_t queueFamily, VkSurfaceFormatKHR* surfaceFormat, VkPresentModeKHR* presentMode);
+VkImage*            PLCore_Priv_AcquireSwapchainImages(VkDevice device, VkSwapchainKHR swapchain, VkFormat renderFormat, VkImageView** imageViews, uint32_t* imageCount);
+VkImage             PLCore_Priv_CreateDepthBuffer(VkDevice device, VkPhysicalDeviceMemoryProperties memoryProperties, VkImageView* depthView, VkFormat depthFormat, VkExtent2D resolution, uint32_t queueFamily);
+VkFramebuffer       PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2D resolution, VkRenderPass renderPass, VkImageView swapchainImage, VkImageView depthView);
 
 PLCore_RenderInstance   PLCore_CreateRenderingInstance();
+PLCore_Window           PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t height);
+PLCore_Renderer         PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window);
 
 
 
