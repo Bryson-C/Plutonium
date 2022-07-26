@@ -322,7 +322,6 @@ VkCommandBuffer* PLCore_Priv_CreateCommandBuffers(VkDevice device, VkCommandPool
     vkAllocateCommandBuffers(device, &allocInfo, buffers);
     return buffers;
 }
-
 GLFWwindow* PLCore_Priv_CreateWindow(VkInstance instance, uint32_t width, uint32_t height, VkSurfaceKHR* surface) {
     GLFWwindow* window = glfwCreateWindow(width, height, "Application", VK_NULL_HANDLE, VK_NULL_HANDLE);
     glfwCreateWindowSurface(instance, window, VK_NULL_HANDLE, surface);
@@ -368,8 +367,6 @@ static VkExtent2D getSurfaceExtent(GLFWwindow* window) {
     glfwGetWindowSize(window, &x, &y);
     return (VkExtent2D) {.width = x, .height = y};
 }
-
-// TODO: Create Framebuffers
 
 VkSwapchainKHR PLCore_Priv_CreateSwapchain(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkExtent2D screenResolution, uint32_t queueFamily, VkSurfaceFormatKHR* surfaceFormat, VkPresentModeKHR* presentMode) {
 
@@ -522,6 +519,35 @@ VkFramebuffer PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2D resoluti
     vkCreateFramebuffer(device, &bufferInfo, VK_NULL_HANDLE, &framebuffer);
     return framebuffer;
 }
+
+
+PLCore_ShaderModule createShader(VkDevice device, const char* path, const char* entryPoint) {
+    PLCore_ShaderModule shader;
+    shader.path = path;
+    shader.entryPoint = entryPoint;
+
+    fopen_s(&shader.file, path, "rb");
+    fseek(shader.file, 0, SEEK_END);
+    shader.size = ftell(shader.file);
+    rewind(shader.file);
+
+    shader.buffer = malloc(sizeof(char) * shader.size + 1);
+    fread_s(shader.buffer, shader.size, sizeof(char), shader.size, shader.file);
+    shader.buffer[shader.size-1] = '\0';
+
+    VkShaderModuleCreateInfo shaderInfo;
+    shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderInfo.pNext = VK_NULL_HANDLE;
+    shaderInfo.flags = 0;
+    shaderInfo.codeSize = shader.size;
+    shaderInfo.pCode = (uint32_t*)shader.buffer;
+
+    shader.result = vkCreateShaderModule(device, &shaderInfo, VK_NULL_HANDLE, &shader.module);
+
+    return shader;
+}
+
+
 PLCore_RenderInstance PLCore_CreateRenderingInstance() {
     PLCore_RenderInstance renderInstance;
     renderInstance.pl_instance.instance = PLCore_Priv_CreateInstance(&renderInstance.pl_instance.priv_Messenger);
@@ -589,4 +615,131 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
     renderer.graphicsPool.buffers = PLCore_Priv_CreateCommandBuffers(instance.pl_device.device, renderer.graphicsPool.pool, renderer.swapchainImageCount);
 
     return renderer;
+}
+//PLCore_GraphicsPipeline
+
+
+// TODO: Make Pipeline Builder
+PipelineBuilder newPipelineBuilder() {
+    PipelineBuilder builder;
+    builder.hasShaders = 0;
+    builder.hasVertexInput = 0;
+    builder.hasDepthStencil = 0;
+    builder.hasInputAssembly = 0;
+    builder.hasPipelineLayout = 0;
+    builder.hasMultisample = 0;
+    builder.hasColorBlend = 0;
+    builder.hasRasterizer = 0;
+    builder.hasRenderPass = 0;
+    builder.hasViewportState = 0;
+    builder.hasScissor = 0;
+    builder.hasViewport = 0;
+    builder.hasExtent = 0;
+    return builder;
+}
+
+void addShadersToPipelineBuilder(PipelineBuilder* builder, U32 shaderCount, VkPipelineShaderStageCreateInfo* shaders) {
+    builder->hasShaders = 1;
+    builder->shaderStages = shaders;
+    builder->shaderStageCount = shaderCount;
+}
+
+void addVertexInputToPipelineBuilder(PipelineBuilder* builder, VkPipelineVertexInputStateCreateInfo vertexInput) {
+    builder->hasVertexInput = 1;
+    builder->vertexInput = vertexInput;
+}
+
+void addInputAssemblyToPipelineBuilder(PipelineBuilder* builder, VkPipelineInputAssemblyStateCreateInfo inputAssembly) {
+    builder->hasInputAssembly = 1;
+    builder->inputAssembly = inputAssembly;
+}
+
+void addExtent2dToPipelineBuilder(PipelineBuilder* builder, VkExtent2D extent) {
+    builder->hasExtent = 1;
+    builder->extent = extent;
+}
+
+void addViewportStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineViewportStateCreateInfo viewportState) {
+    builder->hasViewportState = 1;
+    builder->viewportState = viewportState;
+}
+
+void addPipelineLayoutToPipelineBuilder(PipelineBuilder* builder, VkPipelineLayout pipelineLayout) {
+    builder->hasPipelineLayout = 1;
+    builder->pipelineLayout = pipelineLayout;
+}
+
+void addRasterizerToPipelineBuilder(PipelineBuilder* builder, VkPipelineRasterizationStateCreateInfo rasterizer) {
+    builder->hasRasterizer = 1;
+    builder->rasterizer = rasterizer;
+}
+
+void addMultisampleStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineMultisampleStateCreateInfo multisample) {
+    builder->hasMultisample = 1;
+    builder->multisample = multisample;
+}
+
+void addColorBlendStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineColorBlendStateCreateInfo colorBlend) {
+    builder->hasColorBlend = 1;
+    builder->colorBlend = colorBlend;
+}
+
+void addRenderPassToPipelineBuilder(PipelineBuilder* builder, RenderPass renderPass) {
+    builder->hasRenderPass = 1;
+    builder->renderPass = renderPass;
+}
+
+void addDepthStencilToPipelineBuilder(PipelineBuilder* builder, VkPipelineDepthStencilStateCreateInfo depthStencil) {
+    builder->hasDepthStencil = 1;
+    builder->depthStencil = depthStencil;
+}
+
+VkPipeline createPipelineFromBuilder(VkDevice device, Swapchain swapchain, PipelineBuilder* builder) {
+    VkPipeline pipeline;
+
+    // Cannot Go Without Shaders
+    if (builder->hasShaders == 0) {}
+    if (builder->hasVertexInput == 0) {}
+
+    if (builder->hasDepthStencil == 0) { addDepthStencilToPipelineBuilder(builder, createDepthStencilState()); }
+    if (builder->hasInputAssembly == 0) { addInputAssemblyToPipelineBuilder(builder, createInputAssemblyStage(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)); }
+    if (builder->hasPipelineLayout == 0) { addPipelineLayoutToPipelineBuilder(builder, createPipelineLayout(device, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE)); }
+    if (builder->hasMultisample == 0) { addMultisampleStateToPipelineBuilder(builder, createMultisampleState()); }
+    if (builder->hasColorBlend == 0) { addColorBlendStateToPipelineBuilder(builder, createColorBlend(1, createColorBlendAttachment())); }
+    if (builder->hasRasterizer == 0) { addRasterizerToPipelineBuilder(builder, createRasterizer(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE, 1.0f)); }
+
+    // Cannot Go Without Viewport or Extent
+    if (builder->hasViewportState == 0) {
+        if (builder->hasExtent != 0) { // if we have extent
+            if (builder->hasScissor == 0) builder->viewport = createViewport(builder->extent);
+            if (builder->hasViewport == 0) builder->scissor = createScissor(builder->extent);
+        } else { /* cannot recover*/ }
+        builder->viewportState = createViewportState(builder->viewport, builder->scissor);
+    }
+
+    if (builder->hasRenderPass == 0) { builder->renderPass = createRenderPass(device, swapchain); addRenderPassToPipelineBuilder(builder, builder->renderPass); }
+
+    VkGraphicsPipelineCreateInfo pipelineInfo;
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.pNext = VK_NULL_HANDLE;
+    pipelineInfo.flags = 0;
+    pipelineInfo.stageCount = builder->shaderStageCount;
+    pipelineInfo.pStages = builder->shaderStages;
+    pipelineInfo.pVertexInputState = &builder->vertexInput;
+    pipelineInfo.pInputAssemblyState = &builder->inputAssembly;
+    pipelineInfo.pTessellationState = VK_NULL_HANDLE;
+    pipelineInfo.pViewportState = &builder->viewportState;
+    pipelineInfo.pRasterizationState = &builder->rasterizer;
+    pipelineInfo.pMultisampleState = &builder->multisample;
+    pipelineInfo.pDepthStencilState = &builder->depthStencil;
+    pipelineInfo.pColorBlendState = &builder->colorBlend;
+    pipelineInfo.pDynamicState = VK_NULL_HANDLE;
+    pipelineInfo.layout = builder->pipelineLayout;
+    pipelineInfo.renderPass = builder->renderPass.renderPass;
+    pipelineInfo.subpass = 0;
+    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+    pipelineInfo.basePipelineIndex = -1;
+
+    vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, VK_NULL_HANDLE, &pipeline);
+    return pipeline;
 }

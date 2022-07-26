@@ -79,6 +79,53 @@ typedef struct {
 
 
 } PLCore_Renderer;
+typedef struct {
+    FILE* file;
+    char* buffer;
+    size_t size;
+    const char* entryPoint;
+    const char* path;
+    VkShaderModule module;
+    VkResult result;
+} PLCore_ShaderModule;
+typedef struct {
+    int32_t hasShaders;
+    uint32_t shaderStageCount;
+    VkPipelineShaderStageCreateInfo* shaderStages;
+
+    int32_t hasVertexInput;
+    VkPipelineVertexInputStateCreateInfo vertexInput;
+
+    int32_t hasInputAssembly;
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly;
+
+    int32_t hasViewport, hasScissor, hasExtent;
+    VkViewport viewport; // only needed if an invalid viewport state exists
+    VkRect2D scissor; // only needed if an invalid viewport state exists
+    VkExtent2D extent; // only needed if no scissor or viewport are valid
+
+    int32_t hasViewportState;
+    VkPipelineViewportStateCreateInfo viewportState;
+
+    int32_t hasRasterizer;
+    VkPipelineRasterizationStateCreateInfo rasterizer;
+
+    int32_t hasMultisample;
+    VkPipelineMultisampleStateCreateInfo multisample;
+
+    int32_t hasDepthStencil;
+    VkPipelineDepthStencilStateCreateInfo depthStencil;
+
+    int32_t hasColorBlend;
+    VkPipelineColorBlendStateCreateInfo colorBlend;
+
+    int32_t hasPipelineLayout;
+    VkPipelineLayout pipelineLayout;
+} PLCore_PipelineBuilder;
+typedef struct {
+    VkPipeline pipeline;
+    VkPipelineLayout layout;
+} PLCore_GraphicsPipeline;
 
 VkInstance          PLCore_Priv_CreateInstance(VkDebugUtilsMessengerEXT* messenger);
 VkPhysicalDevice    PLCore_Priv_CreatePhysicalDevice(VkInstance instance, uint32_t* queueFamilyCount, VkQueueFamilyProperties** queueFamilies);
@@ -95,6 +142,22 @@ VkFramebuffer       PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2D re
 PLCore_RenderInstance   PLCore_CreateRenderingInstance();
 PLCore_Window           PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t height);
 PLCore_Renderer         PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window);
+
+
+void addShadersToPipelineBuilder(PipelineBuilder* builder, U32 shaderCount, VkPipelineShaderStageCreateInfo* shaders);
+void addVertexInputToPipelineBuilder(PipelineBuilder* builder, VkPipelineVertexInputStateCreateInfo vertexInput);
+void addInputAssemblyToPipelineBuilder(PipelineBuilder* builder, VkPipelineInputAssemblyStateCreateInfo inputAssembly);
+void addExtent2dToPipelineBuilder(PipelineBuilder* builder, VkExtent2D extent);
+void addViewportStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineViewportStateCreateInfo viewportState);
+void addPipelineLayoutToPipelineBuilder(PipelineBuilder* builder, VkPipelineLayout pipelineLayout);
+void addRasterizerToPipelineBuilder(PipelineBuilder* builder, VkPipelineRasterizationStateCreateInfo rasterizer);
+void addMultisampleStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineMultisampleStateCreateInfo multisample);
+void addColorBlendStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineColorBlendStateCreateInfo colorBlend);
+void addRenderPassToPipelineBuilder(PipelineBuilder* builder, RenderPass renderPass);
+void addDepthStencilToPipelineBuilder(PipelineBuilder* builder, VkPipelineDepthStencilStateCreateInfo depthStencil);
+
+VkPipeline createPipelineFromBuilder(VkDevice device, Swapchain swapchain, PipelineBuilder* builder);
+
 
 
 
