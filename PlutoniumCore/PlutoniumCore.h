@@ -99,10 +99,8 @@ typedef struct {
     int32_t hasInputAssembly;
     VkPipelineInputAssemblyStateCreateInfo inputAssembly;
 
-    int32_t hasViewport, hasScissor, hasExtent;
+    int32_t hasViewport;
     VkViewport viewport; // only needed if an invalid viewport state exists
-    VkRect2D scissor; // only needed if an invalid viewport state exists
-    VkExtent2D extent; // only needed if no scissor or viewport are valid
 
     int32_t hasViewportState;
     VkPipelineViewportStateCreateInfo viewportState;
@@ -121,6 +119,10 @@ typedef struct {
 
     int32_t hasPipelineLayout;
     VkPipelineLayout pipelineLayout;
+
+    int32_t hasRenderPass;
+    VkRenderPass renderPass;
+    uint32_t subpass;
 } PLCore_PipelineBuilder;
 typedef struct {
     VkPipeline pipeline;
@@ -142,21 +144,36 @@ VkFramebuffer       PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2D re
 PLCore_RenderInstance   PLCore_CreateRenderingInstance();
 PLCore_Window           PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t height);
 PLCore_Renderer         PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window);
+PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader);
 
+void PLCore_Priv_AddShadersToPipelineBuilder(PLCore_PipelineBuilder* builder, uint32_t shaderCount, VkPipelineShaderStageCreateInfo* shaders);
+void PLCore_Priv_AddVertexInputToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineVertexInputStateCreateInfo vertexInput);
+void PLCore_Priv_AddInputAssemblyToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineInputAssemblyStateCreateInfo inputAssembly);
+void PLCore_Priv_AddViewportStateToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineViewportStateCreateInfo viewportState);
+void PLCore_Priv_AddPipelineLayoutToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineLayout pipelineLayout);
+void PLCore_Priv_AddRasterizerToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineRasterizationStateCreateInfo rasterizer);
+void PLCore_Priv_AddMultisampleStateToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineMultisampleStateCreateInfo multisample);
+void PLCore_Priv_AddColorBlendStateToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineColorBlendStateCreateInfo colorBlend);
+void PLCore_Priv_AddRenderPassToPipelineBuilder(PLCore_PipelineBuilder* builder, VkRenderPass renderPass);
+void PLCore_Priv_AddDepthStencilToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineDepthStencilStateCreateInfo depthStencil);
 
-void addShadersToPipelineBuilder(PipelineBuilder* builder, U32 shaderCount, VkPipelineShaderStageCreateInfo* shaders);
-void addVertexInputToPipelineBuilder(PipelineBuilder* builder, VkPipelineVertexInputStateCreateInfo vertexInput);
-void addInputAssemblyToPipelineBuilder(PipelineBuilder* builder, VkPipelineInputAssemblyStateCreateInfo inputAssembly);
-void addExtent2dToPipelineBuilder(PipelineBuilder* builder, VkExtent2D extent);
-void addViewportStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineViewportStateCreateInfo viewportState);
-void addPipelineLayoutToPipelineBuilder(PipelineBuilder* builder, VkPipelineLayout pipelineLayout);
-void addRasterizerToPipelineBuilder(PipelineBuilder* builder, VkPipelineRasterizationStateCreateInfo rasterizer);
-void addMultisampleStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineMultisampleStateCreateInfo multisample);
-void addColorBlendStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineColorBlendStateCreateInfo colorBlend);
-void addRenderPassToPipelineBuilder(PipelineBuilder* builder, RenderPass renderPass);
-void addDepthStencilToPipelineBuilder(PipelineBuilder* builder, VkPipelineDepthStencilStateCreateInfo depthStencil);
+PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevice device, const char* path, const char* entryPoint);
+VkPipelineShaderStageCreateInfo                 PLCore_Priv_CreateShaderStage(PLCore_ShaderModule shader, VkShaderStageFlagBits shaderStage);
+VkVertexInputAttributeDescription               PLCore_Priv_CreateVertexAttribute(uint32_t binding, uint32_t location, VkFormat format, uint32_t offset);
+VkVertexInputBindingDescription                 PLCore_Priv_CreateVertexBinding(uint32_t binding, VkVertexInputRate inputRate, VkDeviceSize stride);
+VkPipelineVertexInputStateCreateInfo            PLCore_Priv_CreateVertexInput(uint32_t attributeCount, VkVertexInputAttributeDescription* attributes, uint32_t bindingCount, VkVertexInputBindingDescription* bindings);
+VkPipelineInputAssemblyStateCreateInfo          PLCore_Priv_CreateInputAssemblyStage(VkPrimitiveTopology topology);
+VkViewport                                      PLCore_Priv_CreateViewport(VkExtent2D extent);
+VkRect2D                                        PLCore_Priv_CreateScissor(VkExtent2D extent);
+VkPipelineViewportStateCreateInfo               PLCore_Priv_CreateViewportState(VkViewport viewport, VkRect2D scissor);
+VkPipelineLayout                                PLCore_Priv_CreatePipelineLayout(VkDevice device, uint32_t pushConstantCount, VkPushConstantRange* pushConstants, uint32_t setLayoutCount, VkDescriptorSetLayout* setLayouts);
+VkPipelineRasterizationStateCreateInfo          PLCore_Priv_CreateRasterizer(VkPolygonMode polygonMode, VkCullModeFlagBits cullMode, VkFrontFace frontFace, float lineWidth);
+VkPipelineMultisampleStateCreateInfo            PLCore_Priv_CreateMultisampleState();
+VkPipelineColorBlendAttachmentState             PLCore_Priv_CreateColorBlendAttachment();
+VkPipelineColorBlendStateCreateInfo             PLCore_Priv_CreateColorBlend(uint32_t attachmentCount, VkPipelineColorBlendAttachmentState attachment);
+VkPipelineDepthStencilStateCreateInfo           PLCore_Priv_CreateDepthStencilState();
 
-VkPipeline createPipelineFromBuilder(VkDevice device, Swapchain swapchain, PipelineBuilder* builder);
+VkPipeline PLCore_Priv_CreatePipelineFromBuilder(VkDevice device, PLCore_PipelineBuilder* builder, VkPipelineLayout* layout);
 
 
 

@@ -521,7 +521,10 @@ VkFramebuffer PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2D resoluti
 }
 
 
-PLCore_ShaderModule createShader(VkDevice device, const char* path, const char* entryPoint) {
+
+// TODO: Make Pipeline Builder
+
+PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevice device, const char* path, const char* entryPoint) {
     PLCore_ShaderModule shader;
     shader.path = path;
     shader.entryPoint = entryPoint;
@@ -546,6 +549,288 @@ PLCore_ShaderModule createShader(VkDevice device, const char* path, const char* 
 
     return shader;
 }
+VkPipelineShaderStageCreateInfo                 PLCore_Priv_CreateShaderStage(PLCore_ShaderModule shader, VkShaderStageFlagBits shaderStage) {
+    VkPipelineShaderStageCreateInfo pipelineShader;
+    pipelineShader.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pipelineShader.flags = 0;
+    pipelineShader.pNext = VK_NULL_HANDLE;
+    pipelineShader.module = shader.module;
+    pipelineShader.pName = shader.entryPoint;
+    pipelineShader.stage = shaderStage;
+    pipelineShader.pSpecializationInfo = VK_NULL_HANDLE;
+    return pipelineShader;
+}
+VkPipelineInputAssemblyStateCreateInfo          PLCore_Priv_CreateInputAssemblyStage(VkPrimitiveTopology topology) {
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly;
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.pNext = VK_NULL_HANDLE;
+    inputAssembly.flags = 0;
+    inputAssembly.topology = topology;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+    return inputAssembly;
+}
+VkVertexInputAttributeDescription               PLCore_Priv_CreateVertexAttribute(uint32_t binding, uint32_t location, VkFormat format, uint32_t offset) {
+    VkVertexInputAttributeDescription attribute;
+    attribute.binding = binding;
+    attribute.location = location;
+    attribute.format = format;
+    attribute.offset = offset;
+    return attribute;
+}
+VkVertexInputBindingDescription                 PLCore_Priv_CreateVertexBinding(uint32_t binding, VkVertexInputRate inputRate, VkDeviceSize stride) {
+    VkVertexInputBindingDescription description;
+    description.binding = binding;
+    description.inputRate = inputRate;
+    description.stride = stride;
+    return description;
+}
+VkPipelineVertexInputStateCreateInfo            PLCore_Priv_CreateVertexInput(uint32_t attributeCount, VkVertexInputAttributeDescription* attributes, uint32_t bindingCount, VkVertexInputBindingDescription* bindings) {
+
+    VkPipelineVertexInputStateCreateInfo vertexInput;
+    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInput.pNext = VK_NULL_HANDLE;
+    vertexInput.flags = 0;
+    vertexInput.vertexBindingDescriptionCount= bindingCount;
+    vertexInput.pVertexBindingDescriptions = bindings;
+    vertexInput.vertexAttributeDescriptionCount = attributeCount;
+    vertexInput.pVertexAttributeDescriptions = attributes;
+    return vertexInput;
+}
+VkViewport                                      PLCore_Priv_CreateViewport(VkExtent2D extent) {
+    VkViewport viewport;
+    viewport.x = 0;
+    viewport.y = 0;
+    viewport.width = (float)extent.width;
+    viewport.height = (float)extent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    return viewport;
+}
+VkRect2D                                        PLCore_Priv_CreateScissor(VkExtent2D extent) {
+    VkRect2D scissor;
+    scissor.extent = extent;
+    scissor.offset = (VkOffset2D){.x = 0, .y = 0};
+    return scissor;
+}
+VkPipelineViewportStateCreateInfo               PLCore_Priv_CreateViewportState(VkViewport viewport, VkRect2D scissor) {
+    // It is important to send local (to the main function) variables so that the memory is not un-initialized when the struct is returned
+    VkPipelineViewportStateCreateInfo viewportState;
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.pNext = VK_NULL_HANDLE;
+    viewportState.flags = 0;
+    viewportState.viewportCount = 1;
+    viewportState.pViewports = &viewport;
+    viewportState.scissorCount = 1;
+    viewportState.pScissors = &scissor;
+    return viewportState;
+}
+VkPipelineLayout                                PLCore_Priv_CreatePipelineLayout(VkDevice device, uint32_t pushConstantCount, VkPushConstantRange* pushConstants, uint32_t setLayoutCount, VkDescriptorSetLayout* setLayouts) {
+    VkPipelineLayout pipelineLayout;
+
+    VkPipelineLayoutCreateInfo layoutInfo;
+    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.pNext = VK_NULL_HANDLE;
+    layoutInfo.flags = 0;
+    layoutInfo.pushConstantRangeCount = pushConstantCount;
+    layoutInfo.pPushConstantRanges = pushConstants;
+    layoutInfo.setLayoutCount = setLayoutCount;
+    layoutInfo.pSetLayouts = setLayouts;
+
+    vkCreatePipelineLayout(device, &layoutInfo, VK_NULL_HANDLE, &pipelineLayout);
+    return pipelineLayout;
+}
+VkPipelineRasterizationStateCreateInfo          PLCore_Priv_CreateRasterizer(VkPolygonMode polygonMode, VkCullModeFlagBits cullMode, VkFrontFace frontFace, float lineWidth) {
+    VkPipelineRasterizationStateCreateInfo rasterizer;
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.pNext = VK_NULL_HANDLE;
+    rasterizer.flags = 0;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = polygonMode;
+    rasterizer.cullMode = cullMode;
+    rasterizer.frontFace = frontFace;
+    rasterizer.depthBiasEnable = VK_FALSE;
+    rasterizer.depthBiasConstantFactor = 0.0f;
+    rasterizer.depthBiasClamp = 0.0f;
+    rasterizer.depthBiasSlopeFactor = 0.0f;
+    rasterizer.lineWidth = lineWidth;
+    return rasterizer;
+}
+VkPipelineMultisampleStateCreateInfo            PLCore_Priv_CreateMultisampleState() {
+    VkPipelineMultisampleStateCreateInfo multisampling;
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.pNext = VK_NULL_HANDLE;
+    multisampling.flags = 0;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.minSampleShading = 1.0f; // Optional
+    multisampling.pSampleMask = VK_NULL_HANDLE; // Optional
+    multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
+    multisampling.alphaToOneEnable = VK_FALSE; // Optional
+    return multisampling;
+}
+VkPipelineColorBlendAttachmentState             PLCore_Priv_CreateColorBlendAttachment() {
+    VkPipelineColorBlendAttachmentState colorBlendAttachment;
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_FALSE;
+    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
+    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD; // Optional
+    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
+    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
+    return colorBlendAttachment;
+}
+VkPipelineColorBlendStateCreateInfo             PLCore_Priv_CreateColorBlend(uint32_t attachmentCount, VkPipelineColorBlendAttachmentState attachment) {
+    VkPipelineColorBlendStateCreateInfo colorBlend;
+    colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlend.pNext = VK_NULL_HANDLE;
+    colorBlend.flags = 0;
+    colorBlend.logicOpEnable = VK_TRUE; // TODO: does this enable transparency?
+    colorBlend.logicOp = VK_LOGIC_OP_COPY;
+    colorBlend.attachmentCount = attachmentCount;
+    colorBlend.pAttachments = &attachment;
+    colorBlend.blendConstants[0] = 0.0f;
+    colorBlend.blendConstants[1] = 0.0f;
+    colorBlend.blendConstants[2] = 0.0f;
+    colorBlend.blendConstants[3] = 0.0f;
+    return colorBlend;
+}
+VkPipelineDepthStencilStateCreateInfo           PLCore_Priv_CreateDepthStencilState() {
+    VkPipelineDepthStencilStateCreateInfo depthStencil;
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.pNext = VK_NULL_HANDLE;
+    depthStencil.flags = 0;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
+    VkStencilOpState frontStencilState;
+    frontStencilState.failOp = VK_STENCIL_OP_ZERO;
+    frontStencilState.passOp = VK_STENCIL_OP_ZERO;
+    frontStencilState.depthFailOp = VK_STENCIL_OP_ZERO;
+    frontStencilState.compareOp = 0;
+    frontStencilState.compareMask = 0;
+    frontStencilState.writeMask = 0;
+    depthStencil.front = frontStencilState;
+    VkStencilOpState backStencilState = frontStencilState;
+    depthStencil.back = backStencilState;
+    depthStencil.minDepthBounds = 0.0f;
+    depthStencil.maxDepthBounds = 1.0f;
+    return depthStencil;
+}
+
+PLCore_PipelineBuilder newPipelineBuilder() {
+    PLCore_PipelineBuilder builder;
+    builder.hasShaders = 0;
+    builder.hasVertexInput = 0;
+    builder.hasDepthStencil = 0;
+    builder.hasInputAssembly = 0;
+    builder.hasPipelineLayout = 0;
+    builder.hasMultisample = 0;
+    builder.hasColorBlend = 0;
+    builder.hasRasterizer = 0;
+    builder.hasRenderPass = 0;
+    builder.hasViewportState = 0;
+    builder.hasViewport = 0;
+    return builder;
+}
+
+void PLCore_Priv_AddShadersToPipelineBuilder(PLCore_PipelineBuilder* builder, uint32_t shaderCount, VkPipelineShaderStageCreateInfo* shaders) {
+    builder->hasShaders = 1;
+    builder->shaderStages = shaders;
+    builder->shaderStageCount = shaderCount;
+}
+void PLCore_Priv_AddVertexInputToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineVertexInputStateCreateInfo vertexInput) {
+    builder->hasVertexInput = 1;
+    builder->vertexInput = vertexInput;
+}
+void PLCore_Priv_AddInputAssemblyToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineInputAssemblyStateCreateInfo inputAssembly) {
+    builder->hasInputAssembly = 1;
+    builder->inputAssembly = inputAssembly;
+}
+void PLCore_Priv_AddViewportStateToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineViewportStateCreateInfo viewportState) {
+    builder->hasViewportState = 1;
+    builder->viewportState = viewportState;
+}
+void PLCore_Priv_AddPipelineLayoutToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineLayout pipelineLayout) {
+    builder->hasPipelineLayout = 1;
+    builder->pipelineLayout = pipelineLayout;
+}
+void PLCore_Priv_AddRasterizerToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineRasterizationStateCreateInfo rasterizer) {
+    builder->hasRasterizer = 1;
+    builder->rasterizer = rasterizer;
+}
+void PLCore_Priv_AddMultisampleStateToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineMultisampleStateCreateInfo multisample) {
+    builder->hasMultisample = 1;
+    builder->multisample = multisample;
+}
+void PLCore_Priv_AddColorBlendStateToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineColorBlendStateCreateInfo colorBlend) {
+    builder->hasColorBlend = 1;
+    builder->colorBlend = colorBlend;
+}
+void PLCore_Priv_AddRenderPassToPipelineBuilder(PLCore_PipelineBuilder* builder, VkRenderPass renderPass) {
+    builder->hasRenderPass = 1;
+    builder->renderPass = renderPass;
+}
+void PLCore_Priv_AddDepthStencilToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineDepthStencilStateCreateInfo depthStencil) {
+    builder->hasDepthStencil = 1;
+    builder->depthStencil = depthStencil;
+}
+
+VkPipeline PLCore_Priv_CreatePipelineFromBuilder(VkDevice device, PLCore_PipelineBuilder* builder, VkPipelineLayout* layout) {
+    VkPipeline pipeline;
+
+    // Cannot Go Without Shaders
+    if (builder->hasShaders == 0) {}
+    if (builder->hasVertexInput == 0) {}
+
+    if (builder->hasDepthStencil == 0) { PLCore_Priv_AddDepthStencilToPipelineBuilder(builder, PLCore_Priv_CreateDepthStencilState()); }
+    if (builder->hasInputAssembly == 0) { PLCore_Priv_AddInputAssemblyToPipelineBuilder(builder, PLCore_Priv_CreateInputAssemblyStage(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)); }
+    if (builder->hasPipelineLayout == 0) { PLCore_Priv_AddPipelineLayoutToPipelineBuilder(builder, PLCore_Priv_CreatePipelineLayout(device, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE)); }
+    if (builder->hasMultisample == 0) { PLCore_Priv_AddMultisampleStateToPipelineBuilder(builder, PLCore_Priv_CreateMultisampleState()); }
+    if (builder->hasColorBlend == 0) { PLCore_Priv_AddColorBlendStateToPipelineBuilder(builder, PLCore_Priv_CreateColorBlend(1, PLCore_Priv_CreateColorBlendAttachment())); }
+    if (builder->hasRasterizer == 0) { PLCore_Priv_AddRasterizerToPipelineBuilder(builder, PLCore_Priv_CreateRasterizer(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE, 1.0f)); }
+
+    // Cannot Go Without Viewport or Extent
+    if (builder->hasViewportState == 0) {
+        fprintf(stderr,"Invalid Or No Viewport Present In Pipeline Builder Therefore Will Not Continue");
+        assert(1);
+    }
+
+    if (builder->hasRenderPass == 0) {
+        fprintf(stderr,"Invalid Or No Render Pass Present In Pipeline Builder Therefore Will Not Continue");
+        assert(1);
+    }
+
+
+    VkGraphicsPipelineCreateInfo pipelineInfo;
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.pNext = VK_NULL_HANDLE;
+    pipelineInfo.flags = 0;
+    pipelineInfo.stageCount = builder->shaderStageCount;
+    pipelineInfo.pStages = builder->shaderStages;
+    pipelineInfo.pVertexInputState = &builder->vertexInput;
+    pipelineInfo.pInputAssemblyState = &builder->inputAssembly;
+    pipelineInfo.pTessellationState = VK_NULL_HANDLE;
+    pipelineInfo.pViewportState = &builder->viewportState;
+    pipelineInfo.pRasterizationState = &builder->rasterizer;
+    pipelineInfo.pMultisampleState = &builder->multisample;
+    pipelineInfo.pDepthStencilState = &builder->depthStencil;
+    pipelineInfo.pColorBlendState = &builder->colorBlend;
+    pipelineInfo.pDynamicState = VK_NULL_HANDLE;
+    pipelineInfo.layout = builder->pipelineLayout;
+    pipelineInfo.renderPass = builder->renderPass;
+    pipelineInfo.subpass = 0;
+    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+    pipelineInfo.basePipelineIndex = -1;
+
+    *layout = builder->pipelineLayout;
+    vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, VK_NULL_HANDLE, &pipeline);
+    return pipeline;
+}
+
 
 
 PLCore_RenderInstance PLCore_CreateRenderingInstance() {
@@ -585,9 +870,9 @@ PLCore_Window PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t 
             .minDepth = 0.0f,
     };
     window.renderArea = (VkRect2D){
-        .extent = window.resolution,
-        .offset.x = 0,
-        .offset.y = 0,
+            .extent = window.resolution,
+            .offset.x = 0,
+            .offset.y = 0,
     };
     return window;
 }
@@ -616,130 +901,24 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
 
     return renderer;
 }
-//PLCore_GraphicsPipeline
+PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader) {
+    PLCore_GraphicsPipeline pipeline;
+    PLCore_PipelineBuilder builder;
 
+    PLCore_Priv_AddRenderPassToPipelineBuilder(&builder, renderer.renderPass);
 
-// TODO: Make Pipeline Builder
-PipelineBuilder newPipelineBuilder() {
-    PipelineBuilder builder;
-    builder.hasShaders = 0;
-    builder.hasVertexInput = 0;
-    builder.hasDepthStencil = 0;
-    builder.hasInputAssembly = 0;
-    builder.hasPipelineLayout = 0;
-    builder.hasMultisample = 0;
-    builder.hasColorBlend = 0;
-    builder.hasRasterizer = 0;
-    builder.hasRenderPass = 0;
-    builder.hasViewportState = 0;
-    builder.hasScissor = 0;
-    builder.hasViewport = 0;
-    builder.hasExtent = 0;
-    return builder;
-}
+    VkPipelineShaderStageCreateInfo shaders[] = {
+            PLCore_Priv_CreateShaderStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT),
+            PLCore_Priv_CreateShaderStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT),
+    };
+    PLCore_Priv_AddShadersToPipelineBuilder(&builder, 2, shaders);
 
-void addShadersToPipelineBuilder(PipelineBuilder* builder, U32 shaderCount, VkPipelineShaderStageCreateInfo* shaders) {
-    builder->hasShaders = 1;
-    builder->shaderStages = shaders;
-    builder->shaderStageCount = shaderCount;
-}
+    VkPipelineViewportStateCreateInfo viewport = PLCore_Priv_CreateViewportState(window.viewport, window.renderArea);
+    PLCore_Priv_AddViewportStateToPipelineBuilder(&builder, viewport);
 
-void addVertexInputToPipelineBuilder(PipelineBuilder* builder, VkPipelineVertexInputStateCreateInfo vertexInput) {
-    builder->hasVertexInput = 1;
-    builder->vertexInput = vertexInput;
-}
+    VkPipelineVertexInputStateCreateInfo vertexInput;
+    PLCore_Priv_AddVertexInputToPipelineBuilder(&builder, );
 
-void addInputAssemblyToPipelineBuilder(PipelineBuilder* builder, VkPipelineInputAssemblyStateCreateInfo inputAssembly) {
-    builder->hasInputAssembly = 1;
-    builder->inputAssembly = inputAssembly;
-}
-
-void addExtent2dToPipelineBuilder(PipelineBuilder* builder, VkExtent2D extent) {
-    builder->hasExtent = 1;
-    builder->extent = extent;
-}
-
-void addViewportStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineViewportStateCreateInfo viewportState) {
-    builder->hasViewportState = 1;
-    builder->viewportState = viewportState;
-}
-
-void addPipelineLayoutToPipelineBuilder(PipelineBuilder* builder, VkPipelineLayout pipelineLayout) {
-    builder->hasPipelineLayout = 1;
-    builder->pipelineLayout = pipelineLayout;
-}
-
-void addRasterizerToPipelineBuilder(PipelineBuilder* builder, VkPipelineRasterizationStateCreateInfo rasterizer) {
-    builder->hasRasterizer = 1;
-    builder->rasterizer = rasterizer;
-}
-
-void addMultisampleStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineMultisampleStateCreateInfo multisample) {
-    builder->hasMultisample = 1;
-    builder->multisample = multisample;
-}
-
-void addColorBlendStateToPipelineBuilder(PipelineBuilder* builder, VkPipelineColorBlendStateCreateInfo colorBlend) {
-    builder->hasColorBlend = 1;
-    builder->colorBlend = colorBlend;
-}
-
-void addRenderPassToPipelineBuilder(PipelineBuilder* builder, RenderPass renderPass) {
-    builder->hasRenderPass = 1;
-    builder->renderPass = renderPass;
-}
-
-void addDepthStencilToPipelineBuilder(PipelineBuilder* builder, VkPipelineDepthStencilStateCreateInfo depthStencil) {
-    builder->hasDepthStencil = 1;
-    builder->depthStencil = depthStencil;
-}
-
-VkPipeline createPipelineFromBuilder(VkDevice device, Swapchain swapchain, PipelineBuilder* builder) {
-    VkPipeline pipeline;
-
-    // Cannot Go Without Shaders
-    if (builder->hasShaders == 0) {}
-    if (builder->hasVertexInput == 0) {}
-
-    if (builder->hasDepthStencil == 0) { addDepthStencilToPipelineBuilder(builder, createDepthStencilState()); }
-    if (builder->hasInputAssembly == 0) { addInputAssemblyToPipelineBuilder(builder, createInputAssemblyStage(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)); }
-    if (builder->hasPipelineLayout == 0) { addPipelineLayoutToPipelineBuilder(builder, createPipelineLayout(device, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE)); }
-    if (builder->hasMultisample == 0) { addMultisampleStateToPipelineBuilder(builder, createMultisampleState()); }
-    if (builder->hasColorBlend == 0) { addColorBlendStateToPipelineBuilder(builder, createColorBlend(1, createColorBlendAttachment())); }
-    if (builder->hasRasterizer == 0) { addRasterizerToPipelineBuilder(builder, createRasterizer(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE, 1.0f)); }
-
-    // Cannot Go Without Viewport or Extent
-    if (builder->hasViewportState == 0) {
-        if (builder->hasExtent != 0) { // if we have extent
-            if (builder->hasScissor == 0) builder->viewport = createViewport(builder->extent);
-            if (builder->hasViewport == 0) builder->scissor = createScissor(builder->extent);
-        } else { /* cannot recover*/ }
-        builder->viewportState = createViewportState(builder->viewport, builder->scissor);
-    }
-
-    if (builder->hasRenderPass == 0) { builder->renderPass = createRenderPass(device, swapchain); addRenderPassToPipelineBuilder(builder, builder->renderPass); }
-
-    VkGraphicsPipelineCreateInfo pipelineInfo;
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.pNext = VK_NULL_HANDLE;
-    pipelineInfo.flags = 0;
-    pipelineInfo.stageCount = builder->shaderStageCount;
-    pipelineInfo.pStages = builder->shaderStages;
-    pipelineInfo.pVertexInputState = &builder->vertexInput;
-    pipelineInfo.pInputAssemblyState = &builder->inputAssembly;
-    pipelineInfo.pTessellationState = VK_NULL_HANDLE;
-    pipelineInfo.pViewportState = &builder->viewportState;
-    pipelineInfo.pRasterizationState = &builder->rasterizer;
-    pipelineInfo.pMultisampleState = &builder->multisample;
-    pipelineInfo.pDepthStencilState = &builder->depthStencil;
-    pipelineInfo.pColorBlendState = &builder->colorBlend;
-    pipelineInfo.pDynamicState = VK_NULL_HANDLE;
-    pipelineInfo.layout = builder->pipelineLayout;
-    pipelineInfo.renderPass = builder->renderPass.renderPass;
-    pipelineInfo.subpass = 0;
-    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-    pipelineInfo.basePipelineIndex = -1;
-
-    vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, VK_NULL_HANDLE, &pipeline);
+    pipeline.pipeline = PLCore_Priv_CreatePipelineFromBuilder(instance.pl_device.device, &builder, &pipeline.layout);
     return pipeline;
 }
