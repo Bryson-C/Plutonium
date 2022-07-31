@@ -521,9 +521,6 @@ VkFramebuffer PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2D resoluti
 }
 
 
-
-// TODO: Make Pipeline Builder
-
 PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevice device, const char* path, const char* entryPoint) {
     PLCore_ShaderModule shader;
     shader.path = path;
@@ -721,7 +718,8 @@ VkPipelineDepthStencilStateCreateInfo           PLCore_Priv_CreateDepthStencilSt
     return depthStencil;
 }
 
-PLCore_PipelineBuilder newPipelineBuilder() {
+PLCore_PipelineBuilder PLCore_Priv_CreateBlankPipelineBuilder() {
+    // Initializes A Blank Builder
     PLCore_PipelineBuilder builder;
     builder.hasShaders = 0;
     builder.hasVertexInput = 0;
@@ -831,7 +829,127 @@ VkPipeline PLCore_Priv_CreatePipelineFromBuilder(VkDevice device, PLCore_Pipelin
     return pipeline;
 }
 
+VkBuffer PLCore_Priv_CreateBuffer(VkDevice device, VkPhysicalDeviceMemoryProperties memoryProperties, VkDeviceSize size, uint32_t queueFamily, VkBufferUsageFlagBits usage, VkMemoryPropertyFlagBits memoryFlags, VkDeviceMemory* memory) {
+    VkBuffer buffer;
 
+    VkBufferCreateInfo bufferInfo;
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.pNext = VK_NULL_HANDLE;
+    bufferInfo.flags = 0;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    bufferInfo.queueFamilyIndexCount = 1;
+    bufferInfo.pQueueFamilyIndices = &queueFamily;
+
+    // Create Buffer
+    vkCreateBuffer(device, &bufferInfo, VK_NULL_HANDLE, &buffer);
+
+    // Ask For Allocation Requirements
+    VkMemoryRequirements bufferRequirements;
+    vkGetBufferMemoryRequirements(device, buffer, &bufferRequirements);
+
+    VkMemoryAllocateInfo bufferAlloc;
+    bufferAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    bufferAlloc.pNext = VK_NULL_HANDLE;
+    bufferAlloc.allocationSize = bufferRequirements.size;
+    bufferAlloc.memoryTypeIndex = findMemoryType(memoryProperties,bufferRequirements.memoryTypeBits, memoryFlags);
+
+    // Allocate And Bind Memory For Buffer Based On What Is Needed
+    vkAllocateMemory(device, &bufferAlloc, VK_NULL_HANDLE, memory);
+    vkBindBufferMemory(device, buffer, *memory, 0);
+
+    return buffer;
+}
+VkBuffer PLCore_Priv_CreateGPUBuffer(VkDevice device, VkPhysicalDeviceMemoryProperties memoryProperties, uint32_t queueFamily, VkDeviceSize size, VkBufferUsageFlagBits usageFlags, VkCommandBuffer cmdBuffer, VkQueue submitQueue, void* data, VkDeviceMemory* memory) {
+    // Staging Buffer Will Store The Data
+    // Next The Staging Buffer Will Transfer It To A Buffer Which Is Allocated To The GPU
+    VkDeviceMemory stagingMemory;
+    VkBuffer stagingBuffer = PLCore_Priv_CreateBuffer(device, memoryProperties, size, queueFamily, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, CPU_COHERENT | CPU_VISIBLE, &stagingMemory);
+    // Buffer Is Created For The GPU
+    // It Will Accept Data From The Staging Buffer
+    VkDeviceMemory bufferMemory;
+    VkBuffer buffer = PLCore_Priv_CreateBuffer(device, memoryProperties, size, queueFamily, usageFlags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, GPU_LOCAL, &bufferMemory);
+
+    // Allocate Data To The Staging Buffer
+    void* bufferData;
+    vkMapMemory(device, stagingMemory, 0, size, 0, &bufferData);
+    memcpy(bufferData, data, (VkDeviceSize) size);
+    vkUnmapMemory(device, stagingMemory);
+
+    // Copying The Data From The Staging Buffer To The GPU Allocated Buffer
+    VkCommandBufferBeginInfo vertexCopyBeginfo;
+    vertexCopyBeginfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    vertexCopyBeginfo.pNext = VK_NULL_HANDLE;
+    vertexCopyBeginfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vertexCopyBeginfo.pInheritanceInfo = VK_NULL_HANDLE;
+
+    vkBeginCommandBuffer(cmdBuffer, &vertexCopyBeginfo);
+    VkBufferCopy CopyInfo = {.size = size,.dstOffset = 0,.srcOffset = 0};
+    vkCmdCopyBuffer(cmdBuffer, stagingBuffer, buffer, 1, &CopyInfo);
+    vkEndCommandBuffer(cmdBuffer);
+
+    // Submit The Data To Be Transfered To The GPU Allocated Buffer
+    VkSubmitInfo submitInfo = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = VK_NULL_HANDLE,
+            .waitSemaphoreCount = 0,
+            .pWaitSemaphores = VK_NULL_HANDLE,
+            .pWaitDstStageMask = VK_NULL_HANDLE,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmdBuffer,
+            .signalSemaphoreCount = 0,
+            .pSignalSemaphores = VK_NULL_HANDLE,
+    };
+
+    // Fence To Wait For The End Of The Submit Task
+    VkFenceCreateInfo fenceInfo = {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .pNext = VK_NULL_HANDLE,
+            .flags = 0,
+    };
+    VkFence fence;
+    vkCreateFence(device, &fenceInfo, VK_NULL_HANDLE, &fence);
+
+    vkQueueSubmit(submitQueue, 1, &submitInfo, fence);
+    vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
+
+    // We Dont Need The Staging Buffer Becuase It Gave Up Its Data To The GPU Buffer
+    vkFreeMemory(device, stagingMemory, VK_NULL_HANDLE);
+    vkDestroyBuffer(device, stagingBuffer, VK_NULL_HANDLE);
+
+    return buffer;
+}
+void PLCore_UploadDataToBuffer(VkDevice device, VkDeviceMemory* memory, VkDeviceSize size, void* data) {
+    void* bufferData;
+    vkMapMemory(device, *memory, 0, size, 0, &bufferData);
+    memcpy(bufferData, data, (VkDeviceSize)size);
+    vkUnmapMemory(device, *memory);
+}
+
+static void BeginFrameRecording(VkCommandBuffer buffer, VkRenderPass renderPass, VkFramebuffer framebuffer, VkRect2D scissor, uint32_t clearCount, VkClearValue* clears) {
+    VkRenderPassBeginInfo beginfo;
+    beginfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    beginfo.pNext = VK_NULL_HANDLE;
+    beginfo.renderPass = renderPass;
+    beginfo.framebuffer = framebuffer;
+    beginfo.renderArea = scissor;
+    beginfo.clearValueCount = clearCount;
+    beginfo.pClearValues = clears;
+
+    VkCommandBufferBeginInfo cmdBeginfo;
+    cmdBeginfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    cmdBeginfo.pNext = VK_NULL_HANDLE;
+    cmdBeginfo.flags = 0;
+    cmdBeginfo.pInheritanceInfo = VK_NULL_HANDLE;
+
+    vkBeginCommandBuffer(buffer, &cmdBeginfo);
+    vkCmdBeginRenderPass(buffer, &beginfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+static void EndFrameRecording(VkCommandBuffer buffer) {
+    vkCmdEndRenderPass(buffer);
+    vkEndCommandBuffer(buffer);
+}
 
 PLCore_RenderInstance PLCore_CreateRenderingInstance() {
     PLCore_RenderInstance renderInstance;
@@ -853,7 +971,7 @@ PLCore_RenderInstance PLCore_CreateRenderingInstance() {
     renderInstance.pl_device.graphicsQueue = queues[0];
     renderInstance.pl_device.transferQueue = queues[1];
 
-    renderInstance.transferPool.pool = PLCore_Priv_CreateCommandPool(renderInstance.pl_device.device, renderInstance.pl_device.transferQueue.familyIndex, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+    renderInstance.pl_transferPool.pool = PLCore_Priv_CreateCommandPool(renderInstance.pl_device.device, renderInstance.pl_device.transferQueue.familyIndex, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
     return renderInstance;
 }
@@ -899,11 +1017,33 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
     renderer.graphicsPool.pool = PLCore_Priv_CreateCommandPool(instance.pl_device.device, instance.pl_device.graphicsQueue.familyIndex, 0);
     renderer.graphicsPool.buffers = PLCore_Priv_CreateCommandBuffers(instance.pl_device.device, renderer.graphicsPool.pool, renderer.swapchainImageCount);
 
+    renderer.backBuffers = 2;
+    renderer.priv_activeFrame = 0;
+    renderer.priv_renderFences = malloc(sizeof(VkFence) * renderer.backBuffers);
+    renderer.priv_signalSemahores = malloc(sizeof(VkSemaphore) * renderer.backBuffers);
+    renderer.priv_waitSemahores = malloc(sizeof(VkSemaphore) * renderer.backBuffers);
+    for (uint32_t i = 0; i < renderer.backBuffers; i++) {
+        VkFenceCreateInfo fenceInfo = {
+                .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+                .pNext = VK_NULL_HANDLE,
+                .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        };
+        VkSemaphoreCreateInfo semaInfo = {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                .pNext = VK_NULL_HANDLE,
+                .flags = 0,
+        };
+        vkCreateFence(instance.pl_device.device, &fenceInfo, VK_NULL_HANDLE, &renderer.priv_renderFences[i]);
+        vkCreateSemaphore(instance.pl_device.device, &semaInfo, VK_NULL_HANDLE, &renderer.priv_signalSemahores[i]);
+        vkCreateSemaphore(instance.pl_device.device, &semaInfo, VK_NULL_HANDLE, &renderer.priv_waitSemahores[i]);
+    }
+
+
     return renderer;
 }
 PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader) {
     PLCore_GraphicsPipeline pipeline;
-    PLCore_PipelineBuilder builder;
+    PLCore_PipelineBuilder builder = PLCore_Priv_CreateBlankPipelineBuilder();
 
     PLCore_Priv_AddRenderPassToPipelineBuilder(&builder, renderer.renderPass);
 
@@ -916,9 +1056,103 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
     VkPipelineViewportStateCreateInfo viewport = PLCore_Priv_CreateViewportState(window.viewport, window.renderArea);
     PLCore_Priv_AddViewportStateToPipelineBuilder(&builder, viewport);
 
-    VkPipelineVertexInputStateCreateInfo vertexInput;
-    PLCore_Priv_AddVertexInputToPipelineBuilder(&builder, );
+    PLCore_Priv_AddVertexInputToPipelineBuilder(&builder, vertexInput);
 
+    pipeline.pl_builder = builder;
     pipeline.pipeline = PLCore_Priv_CreatePipelineFromBuilder(instance.pl_device.device, &builder, &pipeline.layout);
     return pipeline;
 }
+PLCore_Buffer PLCore_CreateBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage) {
+    VkDeviceMemory memory;
+    VkBuffer buffer = PLCore_Priv_CreateBuffer(instance.pl_device.device, instance.pl_device.memoryProperties, size, instance.pl_device.transferQueue.familyIndex, usage, CPU_VISIBLE, &memory);
+    PLCore_Buffer pl_buffer = {
+            .buffer = buffer,
+            .memory = memory
+    };
+    return pl_buffer;
+}
+PLCore_Buffer PLCore_CreateGPUBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage, void* data) {
+    VkCommandBuffer cmdBuffer = PLCore_Priv_CreateCommandBuffers(instance.pl_device.device, instance.pl_transferPool.pool, 1)[0];
+    VkDeviceMemory memory;
+    VkBuffer buffer = PLCore_Priv_CreateGPUBuffer(instance.pl_device.device, instance.pl_device.memoryProperties, instance.pl_device.transferQueue.familyIndex, size, usage, cmdBuffer, instance.pl_device.transferQueue.queue, data, &memory);
+    PLCore_Buffer pl_buffer = {
+            .buffer = buffer,
+            .memory = memory,
+    };
+    vkFreeCommandBuffers(instance.pl_device.device, instance.pl_transferPool.pool, 1, &cmdBuffer);
+    return pl_buffer;
+}
+
+void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window) {
+    VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer.swapchain, UINT64_MAX, renderer.priv_waitSemahores[renderer.priv_activeFrame], VK_NULL_HANDLE, &renderer.priv_imageIndex);
+    if (imageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
+        // TODO: Rebuilding Swapchain
+        //DestroyRenderStateRenderer();
+        //CreateRenderStateRenderer();
+        fprintf(stderr, "Rendering Objects Need To Be Rebuilt\n");
+        assert(1);
+        return;
+    }
+
+    vkWaitForFences(instance.pl_device.device, 1, &renderer.priv_renderFences[renderer.priv_activeFrame], VK_TRUE, UINT64_MAX);
+    vkResetFences(instance.pl_device.device, 1, &renderer.priv_renderFences[renderer.priv_activeFrame]);
+
+
+    VkRect2D scissor = window.renderArea;
+    VkClearValue clears[2];
+    clears[0].color.float32[0] = 0.015f;
+    clears[0].color.float32[1] = 0.015f;
+    clears[0].color.float32[2] = 0.015f;
+    clears[0].color.float32[3] = 1.0f;
+    clears[1].depthStencil.depth = 1.0f;
+    clears[1].depthStencil.stencil = 0;
+
+    BeginFrameRecording(renderer.graphicsPool.buffers[renderer.priv_imageIndex], renderer.renderPass, renderer.framebuffers[renderer.priv_imageIndex], scissor, 2, clears);
+}
+void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer renderer) {
+    EndFrameRecording(renderer.graphicsPool.buffers[renderer.priv_imageIndex]);
+
+    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+
+    VkSubmitInfo submitInfo;
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = VK_NULL_HANDLE;
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &renderer.priv_waitSemahores[renderer.priv_activeFrame];
+    submitInfo.pWaitDstStageMask = waitStages;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &renderer.graphicsPool.buffers[renderer.priv_imageIndex];
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &renderer.priv_signalSemahores[renderer.priv_imageIndex];
+
+
+    vkQueueSubmit(instance.pl_device.graphicsQueue.queue, 1, &submitInfo, renderer.priv_renderFences[renderer.priv_activeFrame]);
+
+    VkResult presentationResult;
+    VkPresentInfoKHR presentInfo;
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.pNext = VK_NULL_HANDLE;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = &renderer.priv_signalSemahores[renderer.priv_activeFrame];
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = &renderer.swapchain;
+    presentInfo.pImageIndices = &renderer.priv_imageIndex;
+    presentInfo.pResults = &presentationResult;
+
+    VkResult renderResult = vkQueuePresentKHR(instance.pl_device.graphicsQueue.queue, &presentInfo);
+    if (renderResult == VK_ERROR_OUT_OF_DATE_KHR || renderResult == VK_SUBOPTIMAL_KHR) {
+        // TODO: Rebuilding Swapchain
+        //DestroyRenderStateRenderer();
+        //CreateRenderStateRenderer();
+        fprintf(stderr, "Rendering Objects Need To Be Rebuilt\n");
+        assert(1);
+        return;
+    }
+
+    renderer.priv_activeFrame = (renderer.priv_activeFrame+1)%renderer.backBuffers;
+}
+
+VkCommandBuffer PLCore_ActiveRenderBuffer(PLCore_Renderer renderer) {
+    return renderer.graphicsPool.buffers[renderer.priv_imageIndex];
+}
+

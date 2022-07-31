@@ -9,11 +9,20 @@
 
 #include <stdio.h>              // required: printf, fprintf
 #include <stdlib.h>             // required: malloc, realloc, calloc
+#include <string.h>             // required: memcpy
 #include <assert.h>             // required: assert
 
 #include <vulkan/vulkan.h>      // required: much functionality
 #include <glfw3.h>              // required: much functionality
 
+enum PLCore_MemoryProperties {
+    GPU_LOCAL = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    CPU_VISIBLE = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+    CPU_COHERENT = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+    CPU_CACHED = VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+    LAZY_ALLOCATED = VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT,
+    PROTECTED_MEMORY = VK_MEMORY_PROPERTY_PROTECTED_BIT,
+};
 
 typedef struct {
     VkInstance instance;
@@ -44,7 +53,7 @@ typedef struct {
     PLCore_Instance pl_instance;
     PLCore_Device pl_device;
 
-    PLCore_CommandPool transferPool;
+    PLCore_CommandPool pl_transferPool;
 } PLCore_RenderInstance;
 typedef struct {
     VkSwapchainKHR swapchain;           // Framebuffer Organiser
@@ -77,6 +86,12 @@ typedef struct {
     VkFramebuffer* framebuffers;
     PLCore_CommandPool graphicsPool;
 
+    uint32_t backBuffers;
+    uint32_t priv_activeFrame;
+    uint32_t priv_imageIndex;
+    VkSemaphore* priv_waitSemahores;
+    VkSemaphore* priv_signalSemahores;
+    VkFence* priv_renderFences;
 
 } PLCore_Renderer;
 typedef struct {
@@ -127,7 +142,12 @@ typedef struct {
 typedef struct {
     VkPipeline pipeline;
     VkPipelineLayout layout;
+    PLCore_PipelineBuilder pl_builder;
 } PLCore_GraphicsPipeline;
+typedef struct {
+    VkBuffer buffer;
+    VkDeviceMemory memory;
+} PLCore_Buffer;
 
 VkInstance          PLCore_Priv_CreateInstance(VkDebugUtilsMessengerEXT* messenger);
 VkPhysicalDevice    PLCore_Priv_CreatePhysicalDevice(VkInstance instance, uint32_t* queueFamilyCount, VkQueueFamilyProperties** queueFamilies);
@@ -145,7 +165,15 @@ PLCore_RenderInstance   PLCore_CreateRenderingInstance();
 PLCore_Window           PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t height);
 PLCore_Renderer         PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window);
 PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader);
+PLCore_Buffer           PLCore_CreateBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage);
+PLCore_Buffer           PLCore_CreateGPUBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage, void* data);
+VkCommandBuffer         PLCore_ActiveRenderBuffer(PLCore_Renderer renderer);
 
+
+void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window);
+void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer renderer);
+
+PLCore_PipelineBuilder PLCore_Priv_CreateBlankPipelineBuilder();
 void PLCore_Priv_AddShadersToPipelineBuilder(PLCore_PipelineBuilder* builder, uint32_t shaderCount, VkPipelineShaderStageCreateInfo* shaders);
 void PLCore_Priv_AddVertexInputToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineVertexInputStateCreateInfo vertexInput);
 void PLCore_Priv_AddInputAssemblyToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineInputAssemblyStateCreateInfo inputAssembly);
@@ -174,6 +202,10 @@ VkPipelineColorBlendStateCreateInfo             PLCore_Priv_CreateColorBlend(uin
 VkPipelineDepthStencilStateCreateInfo           PLCore_Priv_CreateDepthStencilState();
 
 VkPipeline PLCore_Priv_CreatePipelineFromBuilder(VkDevice device, PLCore_PipelineBuilder* builder, VkPipelineLayout* layout);
+
+VkBuffer PLCore_Priv_CreateBuffer(VkDevice device, VkPhysicalDeviceMemoryProperties memoryProperties, VkDeviceSize size, uint32_t queueFamily, VkBufferUsageFlagBits usage, VkMemoryPropertyFlagBits memoryFlags, VkDeviceMemory* memory);
+VkBuffer PLCore_Priv_CreateGPUBuffer(VkDevice device, VkPhysicalDeviceMemoryProperties memoryProperties, uint32_t queueFamily, VkDeviceSize size, VkBufferUsageFlagBits usageFlags, VkCommandBuffer cmdBuffer, VkQueue submitQueue, void* data, VkDeviceMemory* memory);
+void PLCore_UploadDataToBuffer(VkDevice device, VkDeviceMemory* memory, VkDeviceSize size, void* data);
 
 
 
