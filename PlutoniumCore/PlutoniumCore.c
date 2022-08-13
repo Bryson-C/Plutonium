@@ -6,7 +6,7 @@
 
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback( VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
-    if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) printf("[Vk]: %s\n\n",pCallbackData->pMessage);
+    if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) printf("[Vk]: %s\n\n",pCallbackData->pMessage);
     return VK_FALSE;
 }
 static uint32_t findMemoryType(VkPhysicalDeviceMemoryProperties memoryProperties, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
@@ -214,7 +214,10 @@ VkDevice PLCore_Priv_CreateDevice(VkPhysicalDevice physicalDevice, uint32_t queu
 
     return device;
 }
+
+
 VkRenderPass PLCore_Priv_CreateRenderPass(VkDevice device, VkFormat presentableFormat, VkFormat depthFormat) {
+
     // Defines The Index And Type Of The Render Pass's Rendering Functionality
     VkAttachmentReference attachments[] = {
             {
@@ -237,7 +240,7 @@ VkRenderPass PLCore_Priv_CreateRenderPass(VkDevice device, VkFormat presentableF
                 .format = presentableFormat,
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -533,7 +536,7 @@ PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevic
 
     shader.buffer = malloc(sizeof(char) * shader.size + 1);
     fread_s(shader.buffer, shader.size, sizeof(char), shader.size, shader.file);
-    shader.buffer[shader.size-1] = '\0';
+    shader.buffer[shader.size] = '\0';
 
     VkShaderModuleCreateInfo shaderInfo;
     shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -997,6 +1000,10 @@ PLCore_Window PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t 
 PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window) {
     PLCore_Renderer renderer;
 
+    VkBool32 presentableQueue;
+    vkGetPhysicalDeviceSurfaceSupportKHR(instance.pl_device.physicalDevice, instance.pl_device.graphicsQueue.familyIndex, window.surface, &presentableQueue);
+    printf("Presentable: %s\n", (presentableQueue) ? "True" : "False");
+
     VkSurfaceFormatKHR renderFormat;
     VkPresentModeKHR renderMode;
     renderer.swapchain = PLCore_Priv_CreateSwapchain(instance.pl_device.device, instance.pl_device.physicalDevice, window.surface, window.resolution, instance.pl_device.graphicsQueue.familyIndex, &renderFormat, &renderMode);
@@ -1014,7 +1021,7 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
         renderer.framebuffers[i] = PLCore_Priv_CreateFramebuffer(instance.pl_device.device, window.resolution, renderer.renderPass, renderer.swapchainImageViews[i], renderer.pl_depthImage.view);
     }
 
-    renderer.graphicsPool.pool = PLCore_Priv_CreateCommandPool(instance.pl_device.device, instance.pl_device.graphicsQueue.familyIndex, 0);
+    renderer.graphicsPool.pool = PLCore_Priv_CreateCommandPool(instance.pl_device.device, instance.pl_device.graphicsQueue.familyIndex, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
     renderer.graphicsPool.buffers = PLCore_Priv_CreateCommandBuffers(instance.pl_device.device, renderer.graphicsPool.pool, renderer.swapchainImageCount);
 
     renderer.backBuffers = 2;
@@ -1045,18 +1052,22 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
     PLCore_GraphicsPipeline pipeline;
     PLCore_PipelineBuilder builder = PLCore_Priv_CreateBlankPipelineBuilder();
 
-    PLCore_Priv_AddRenderPassToPipelineBuilder(&builder, renderer.renderPass);
+
+    VkPipelineViewportStateCreateInfo viewport = PLCore_Priv_CreateViewportState(window.viewport, window.renderArea);
 
     VkPipelineShaderStageCreateInfo shaders[] = {
             PLCore_Priv_CreateShaderStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT),
             PLCore_Priv_CreateShaderStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT),
     };
+
+    pipeline.layout = PLCore_Priv_CreatePipelineLayout(instance.pl_device.device, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE);
+
     PLCore_Priv_AddShadersToPipelineBuilder(&builder, 2, shaders);
-
-    VkPipelineViewportStateCreateInfo viewport = PLCore_Priv_CreateViewportState(window.viewport, window.renderArea);
+    PLCore_Priv_AddRenderPassToPipelineBuilder(&builder, renderer.renderPass);
     PLCore_Priv_AddViewportStateToPipelineBuilder(&builder, viewport);
-
     PLCore_Priv_AddVertexInputToPipelineBuilder(&builder, vertexInput);
+    PLCore_Priv_AddPipelineLayoutToPipelineBuilder(&builder, pipeline.layout);
+
 
     pipeline.pl_builder = builder;
     pipeline.pipeline = PLCore_Priv_CreatePipelineFromBuilder(instance.pl_device.device, &builder, &pipeline.layout);
@@ -1083,8 +1094,8 @@ PLCore_Buffer PLCore_CreateGPUBuffer(PLCore_RenderInstance instance, VkDeviceSiz
     return pl_buffer;
 }
 
-void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window) {
-    VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer.swapchain, UINT64_MAX, renderer.priv_waitSemahores[renderer.priv_activeFrame], VK_NULL_HANDLE, &renderer.priv_imageIndex);
+void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_Window window) {
+    VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer->swapchain, UINT64_MAX, renderer->priv_waitSemahores[renderer->priv_activeFrame], VK_NULL_HANDLE, &(*renderer).priv_imageIndex);
     if (imageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
         // TODO: Rebuilding Swapchain
         //DestroyRenderStateRenderer();
@@ -1094,8 +1105,8 @@ void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer renderer,
         return;
     }
 
-    vkWaitForFences(instance.pl_device.device, 1, &renderer.priv_renderFences[renderer.priv_activeFrame], VK_TRUE, UINT64_MAX);
-    vkResetFences(instance.pl_device.device, 1, &renderer.priv_renderFences[renderer.priv_activeFrame]);
+    vkWaitForFences(instance.pl_device.device, 1, &renderer->priv_renderFences[renderer->priv_activeFrame], VK_TRUE, UINT64_MAX);
+    vkResetFences(instance.pl_device.device, 1, &renderer->priv_renderFences[renderer->priv_activeFrame]);
 
 
     VkRect2D scissor = window.renderArea;
@@ -1107,36 +1118,35 @@ void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer renderer,
     clears[1].depthStencil.depth = 1.0f;
     clears[1].depthStencil.stencil = 0;
 
-    BeginFrameRecording(renderer.graphicsPool.buffers[renderer.priv_imageIndex], renderer.renderPass, renderer.framebuffers[renderer.priv_imageIndex], scissor, 2, clears);
-}
-void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer renderer) {
-    EndFrameRecording(renderer.graphicsPool.buffers[renderer.priv_imageIndex]);
 
+    BeginFrameRecording(renderer->graphicsPool.buffers[renderer->priv_imageIndex], renderer->renderPass, renderer->framebuffers[renderer->priv_imageIndex], scissor, 2, clears);
+}
+void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer) {
+    EndFrameRecording(renderer->graphicsPool.buffers[renderer->priv_imageIndex]);
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
     VkSubmitInfo submitInfo;
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.pNext = VK_NULL_HANDLE;
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &renderer.priv_waitSemahores[renderer.priv_activeFrame];
+    submitInfo.pWaitSemaphores = &renderer->priv_waitSemahores[renderer->priv_activeFrame];
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &renderer.graphicsPool.buffers[renderer.priv_imageIndex];
+    submitInfo.pCommandBuffers = &renderer->graphicsPool.buffers[renderer->priv_imageIndex];
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &renderer.priv_signalSemahores[renderer.priv_imageIndex];
+    submitInfo.pSignalSemaphores = &renderer->priv_signalSemahores[renderer->priv_activeFrame];
 
-
-    vkQueueSubmit(instance.pl_device.graphicsQueue.queue, 1, &submitInfo, renderer.priv_renderFences[renderer.priv_activeFrame]);
+    vkQueueSubmit(instance.pl_device.graphicsQueue.queue, 1, &submitInfo, (*renderer).priv_renderFences[renderer->priv_activeFrame]);
 
     VkResult presentationResult;
     VkPresentInfoKHR presentInfo;
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.pNext = VK_NULL_HANDLE;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderer.priv_signalSemahores[renderer.priv_activeFrame];
+    presentInfo.pWaitSemaphores = &renderer->priv_signalSemahores[renderer->priv_activeFrame];
     presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &renderer.swapchain;
-    presentInfo.pImageIndices = &renderer.priv_imageIndex;
+    presentInfo.pSwapchains = &renderer->swapchain;
+    presentInfo.pImageIndices = &renderer->priv_imageIndex;
     presentInfo.pResults = &presentationResult;
 
     VkResult renderResult = vkQueuePresentKHR(instance.pl_device.graphicsQueue.queue, &presentInfo);
@@ -1149,7 +1159,7 @@ void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer renderer) {
         return;
     }
 
-    renderer.priv_activeFrame = (renderer.priv_activeFrame+1)%renderer.backBuffers;
+    renderer->priv_activeFrame = (renderer->priv_activeFrame+1)%renderer->backBuffers;
 }
 
 VkCommandBuffer PLCore_ActiveRenderBuffer(PLCore_Renderer renderer) {
