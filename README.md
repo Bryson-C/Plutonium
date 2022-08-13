@@ -17,7 +17,7 @@ I may also forget something or mispell some things so keep that in mind
 ## Libraries
 - [GLFW](https://www.glfw.org/)
 - [Vulkan SDK](https://vulkan.lunarg.com/) (I will be using Vulkan 1.2; 1.3 should still work though)
-- [Wren (Still Needs To Be Worked On)](https://wren.io/)
+- [Wren](https://wren.io/) (Still Needs To Be Worked On)
 
 ## Creating Vulkan Objects
 - [Creating Instances](https://github.com/Bryson-C/Plutonium/blob/main/Instance.md)
