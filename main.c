@@ -5,6 +5,7 @@
 #include <time.h>
 #include <math.h>
 
+/*
 //#include "Abstraction/Abstractions.h"
 #include "RenderState/RenderState.h"
 
@@ -13,82 +14,82 @@
 #include "lib/stb_image.h"
 #include "vulkan/vulkan.h"
 #include "shaderc.h"
-/*#define TINYOBJLOADER_IMPLEMENTATION 1
-#include "../TinyOBJ.hpp"*/
 
 
-#include "status.h"
-#include "glfw3.h"
 
 typedef uint32_t U32;
 
+static Buffer s_IndexBuffer;
+static U32* s_GlobalIndices = VK_NULL_HANDLE;
+static size_t s_GlobalIndexCount = 0;
+static size_t s_GlobalIndexSize = 100;
+static U32 s_GlobalIndexOffset = 0;
+static bool s_GlobalIndicesChanged = false;
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-        VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-        VkDebugUtilsMessageTypeFlagsEXT messageType,
-        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-        void* pUserData) {
+static Buffer s_VertexBuffer;
+static vertex* s_GlobalVertices = VK_NULL_HANDLE;
+static size_t s_GlobalVertexCount = 0;
+static size_t s_GlobalVertexSize = 100;
+static bool s_GlobalVerticesChanged = false;
 
-    if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-        printf("[Vk]: %s\n\n",pCallbackData->pMessage);
+vertex* CreateNewQuadViaVertices(float x, float y, float w, float h, Float3 color, Float textureIndex) {
+    if (s_GlobalVertices == VK_NULL_HANDLE) s_GlobalVertices = malloc(sizeof(vertex) * s_GlobalVertexSize);
+    if (s_GlobalVertexCount >= s_GlobalVertexSize - 10) s_GlobalVertices = realloc(s_GlobalVertices, sizeof(vertex) * (s_GlobalVertexSize *= 2));
 
-    return VK_FALSE;
+    if (s_GlobalIndices == VK_NULL_HANDLE) s_GlobalIndices =  malloc(sizeof(U32) * s_GlobalIndexSize);
+    if (s_GlobalIndexCount >= s_GlobalIndexSize - 10) s_GlobalIndices = realloc(s_GlobalIndices, sizeof(U32) * (s_GlobalIndexSize *= 2));
+
+    vertex vertices[4] = {
+        {{x,y,0.0f},color, {1.0f, 0.0f}, textureIndex},
+        {{x + w,y,0.0f},color,{0.0f, 0.0f}, textureIndex},
+        {{x + w,y + h,0.0f},color,{0.0f, 1.0f}, textureIndex},
+        {{x,y + h,0.0f},color,{1.0f, 1.0f}, textureIndex},
+    };
+    memcpy(s_GlobalVertices+s_GlobalVertexCount, vertices, sizeof(vertex) * 4);
+    s_GlobalVertexCount += 4;
+
+
+    U32 indexCount = 6;
+    U32 indices[] = {s_GlobalIndexOffset, s_GlobalIndexOffset+1, s_GlobalIndexOffset+2, s_GlobalIndexOffset+2, s_GlobalIndexOffset+3, s_GlobalIndexOffset};
+    s_GlobalIndexOffset += 4;
+    memcpy(s_GlobalIndices+s_GlobalIndexCount, indices, sizeof(U32) * indexCount);
+    s_GlobalIndexCount += indexCount;
+
+    printf("Vertices: %zi/%zi\n", s_GlobalVertexCount, s_GlobalVertexSize);
+    printf("Indices: %zi/%zi\n", s_GlobalIndexCount, s_GlobalIndexSize);
+    s_GlobalVerticesChanged = true;
+    s_GlobalIndicesChanged = true;
+    return vertices;
 }
 
-const char* shaderCompilationErrorCodeToString(int errorCode) {
-    printf("(Code: %i): ", errorCode);
-    switch (errorCode) {
-        case shaderc_compilation_status_success: return "Success";
-        case shaderc_compilation_status_invalid_stage: return "Failure To Deduce Shader Stage"; // error stage deduction
-        case shaderc_compilation_status_compilation_error: return "Compilation Error";
-        case shaderc_compilation_status_internal_error : return "Unexpected Failure"; // unexpected failure
-        case shaderc_compilation_status_null_result_object: return "Null Result Objects";
-        case shaderc_compilation_status_invalid_assembly: return "Invalid Assembly";
-        case shaderc_compilation_status_validation_error: return "Validation Error";
-        case shaderc_compilation_status_transformation_error : return "Transformation Error";
-        case shaderc_compilation_status_configuration_error: return "Configuration Error";
-        default: return "Unknown Error Code";
-    }
+vertex* AcquireVertices() { return s_GlobalVertices; }
+U32* AcquireIndices(size_t* indexCount) { *indexCount = s_GlobalIndexCount; return s_GlobalIndices; }
+Buffer RequestBufferFromGlobalVertices()
+{
+    s_GlobalVerticesChanged = false;
+    return RequestBufferToGPU(sizeof(vertex) * s_GlobalVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, s_GlobalVertices);
 }
-
-
-void createNewQuadViaVertices(U32 vertexCount, vertex* vertices, float x, float y, float w, float h, Float3 color) {
-    vertices[vertexCount] = (vertex){{x,y,0.0f}, color, {0,0}};
-    vertices[vertexCount+1] = (vertex){{x + w,y,0.0f}, color, {0,0}};
-    vertices[vertexCount+2] = (vertex){{x + w,y + h,0.0f}, color, {0,0}};
-    vertices[vertexCount+3] = (vertex){{x,y + h,0.0f}, color, {0,0}};
+Buffer RequestBufferFromGlobalIndices()
+{
+    s_GlobalIndicesChanged = false;
+    return RequestBufferToGPU(sizeof(U32) * s_GlobalIndexCount, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, s_GlobalIndices);
 }
+*/
 
-void DrawVertexBuffer(Buffer vertexBuffer, Buffer IndexBuffer, U32 vertexCount) {
+#include "Abstraction/PlutoniumCore/PlutoniumCore.h"
 
-}
+#include "Abstraction/PlutoniumCore/WrenScript.h"
 
 
 int main() {
-
+/*
     const Float3 softBlue = {0.1f,0.3f,1.0f};
     const Float3 softRed = {1.0f,0.3f,0.1f};
     const Float3 softGreen = {0.1f,1.0f,0.3f};
+    const Float3 white = {0.9f,0.9f,0.9f};
 
-
-    U32 vertexAllocCount = 4 * 100;
-    U32 shapeCount = 0;
-    vertex* vertices = (vertex*)malloc(sizeof(vertex) * vertexAllocCount);
-
-    for (; shapeCount < vertexAllocCount/4; shapeCount++) {
-        srand(clock() * shapeCount);
-        createNewQuadViaVertices(shapeCount*4, vertices,
-                                 ((float)shapeCount * 0.01f) - 1.0f,
-                                 ((float)shapeCount * 0.01f) - 1.0f,
-                                 0.05f,
-                                 0.05f,
-                                 (shapeCount%2==0) ? softBlue : softRed);
-    }
-
-    U32 indexCount = 6;
-    U32 indices[] = {
-            0, 1, 2, 2, 3, 0
-    };
+    CreateNewQuadViaVertices(-1.0f, -1.0f, 1.0f, 1.0f, white, -1);
+    CreateNewQuadViaVertices(0.0f, 0.0f, 1.0f, 1.0f, white, -1);
 
 
     ApplyShader(VK_SHADER_STAGE_VERTEX_BIT, "D:\\Plutonium\\vertex.spv", "main");
@@ -99,39 +100,36 @@ int main() {
             createVertexBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(vertex))
     };
 
-    U32 attributeCount = 2;
+    U32 attributeCount = 3;
     VkVertexInputAttributeDescription attributes[] = {
             createVertexAttribute(0, 0, (VkFormat)shaderVec3, offsetof(vertex,pos)),
             createVertexAttribute(0, 1, (VkFormat)shaderVec3, offsetof(vertex,col)),
+            createVertexAttribute(0, 2, (VkFormat)shaderVec2, offsetof(vertex,uv)),
+            createVertexAttribute(0, 3, (VkFormat)shaderFloat, offsetof(vertex,textureId)),
     };
     ApplyVertexInput(attributeCount, attributes, bindingCount, bindings);
 
-    ApplyDescriptorLayouts(0, VK_NULL_HANDLE);
-    ApplyPushConstants(0, VK_NULL_HANDLE);
-
-
     CreateRenderState();
 
-    Buffer VertexBuffer = RequestBuffer(sizeof(vertex) * vertexAllocCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertices, true);
-    Buffer IndexBuffer = RequestBuffer(sizeof(U32) * indexCount, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices, true);
 
-    const U32 descriptorCount = 2;
-    Buffer UniformBuffers[2] = {
-            RequestBuffer(sizeof(UBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_NULL_HANDLE, false),
-            RequestBuffer(sizeof(UBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_NULL_HANDLE, false),
+    Buffer VertexBuffer = RequestBufferFromGlobalVertices();
+    Buffer IndexBuffer = RequestBufferFromGlobalIndices();
+
+    UniformBuffer UniformBuffers[2] = {
+        RequestUniform(sizeof(UBO), VK_SHADER_STAGE_FRAGMENT_BIT, 0),
+        RequestUniform(sizeof(UBO), VK_SHADER_STAGE_FRAGMENT_BIT, 0),
     };
-    VkDescriptorSetLayoutBinding binding = createNewBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, descriptorCount, VK_SHADER_STAGE_FRAGMENT_BIT);
-    VkDescriptorSetLayout layout = createDescriptorLayout(VRS.device, 1, &binding);
-    VkDescriptorPool descriptorPool;
-    VkDescriptorSet* descriptorSets = createDescriptorSet(VRS.device, 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, layout, &descriptorPool);
-    for (U32 i = 0; i < descriptorCount; i++)
-        writeDescriptor(VRS.device, descriptorSets[i], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, &UniformBuffers[i].bufferInfo, VK_NULL_HANDLE);
 
+    Texture* texture = RequestTexture("D:\\Plutonium\\texture.jpg", 0);
+    //Texture* texture2 = RequestTexture("D:\\Plutonium\\circ.png", 1);
+    //Texture* texture3 = RequestTexture("D:\\Plutonium\\texture.jpg", 2);
 
-    ApplyDescriptorLayouts(1, &layout);
-    ApplyPushConstants(0, VK_NULL_HANDLE);
+    VkDescriptorSetLayout layouts[] = {UniformBuffers[0].descriptor.layout, VRS.texturePool.layout[0], VRS.texturePool.samplerLayout};
+    ApplyDescriptorLayouts(3, layouts);
 
-    CreateRenderStateRenderer(); // recreate
+    CreateRenderStateRenderer();
+
+    clock_t timer = clock();
 
     while (!glfwWindowShouldClose(VRS.window)) {
         glfwPollEvents();
@@ -139,36 +137,113 @@ int main() {
 
 
         float color = sin((double)clock()/1000)/1.0f + 0.5f;
-        UBO ubo;
-        ubo.xyz = (Float3){color, color, color};
+        UBO ubo = {.xyz = softGreen};
 
-        void* data;
-        vkMapMemory(VRS.device, UniformBuffers[VRS.activeFrame].memory, 0, sizeof(UBO), 0, &data);
-        memcpy(data, &ubo, sizeof(UBO));
-        vkUnmapMemory(VRS.device, UniformBuffers[VRS.activeFrame].memory);
-
+        UpdateUniform(VRS.device, &UniformBuffers[VRS.activeFrame], sizeof(UBO), &ubo);
 
         CommandBuffer currentBuffer = VRS.renderBuffers[VRS.imageIndex];
         VkDeviceSize offsets[] = {0};
-        vkCmdBindDescriptorSets(currentBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                VRS.pipelineLayout,
-                                0,
-                                1,
-                                &descriptorSets[VRS.activeFrame],
-                                0, VK_NULL_HANDLE);
+
+        VkDescriptorSet sets[] = {UniformBuffers[VRS.activeFrame].descriptor.set, VRS.texturePool.samplerSet, texture->set};
+
+        BindDescriptorSets(currentBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VRS.pipelineLayout, 3, sets);
+
         vkCmdBindVertexBuffers(currentBuffer, 0, 1, &VertexBuffer.buffer, offsets);
         vkCmdBindIndexBuffer(currentBuffer, IndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-        for (int32_t i = 0; i < shapeCount; i++) {
-            vkCmdDrawIndexed(currentBuffer, indexCount, 1, 0, i*4, 0);
-        }
+
+        size_t indexCount;
+        AcquireIndices(&indexCount);
+        vkCmdDrawIndexed(currentBuffer, indexCount, 1, 0, 0, 0);
 
         SubmitDraw();
         glfwSwapBuffers(VRS.window);
+
+        if (vkGetFenceStatus(VRS.device, VRS.renderFences[VRS.activeFrame]) == VK_NOT_READY) {
+            if (s_GlobalVerticesChanged) VertexBuffer = RequestBufferFromGlobalVertices();
+            if (s_GlobalIndicesChanged) IndexBuffer = RequestBufferFromGlobalIndices();
+        }
+
     }
 
 
     DestroyRenderState();
+*/
+
+    // remove If You Want The Rendering Code
+    return wrenMain("D:\\Plutonium\\wren.wren");
+
+    PLCore_RenderInstance RenderInstance = PLCore_CreateRenderingInstance();
+    PLCore_Window Window = PLCore_CreateWindow(RenderInstance.pl_instance.instance, 800, 600);
+    PLCore_Renderer Renderer = PLCore_CreateRenderer(RenderInstance, Window);
+
+    PLCore_ShaderModule vShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\v.spv", "main");
+    PLCore_ShaderModule fShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\f.spv", "main");
+
+    typedef struct {
+        float xyz[3];
+        float rgb[3];
+    } vertex;
+
+    vertex* vertices = malloc(sizeof(vertex) * 3);
+    vertices[0] = (vertex){{0.0f, -0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}};
+    vertices[1] = (vertex){{0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}};
+    vertices[2] = (vertex){{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}};
+
+
+
+
+
+    VkVertexInputAttributeDescription attribs[] = {
+            {
+                .binding = 0,
+                .format = VK_FORMAT_R32G32B32_SFLOAT,
+                .offset = offsetof(vertex, xyz),
+                .location = 0,
+            },
+            {
+                .binding = 0,
+                .format = VK_FORMAT_R32G32B32_SFLOAT,
+                .offset = offsetof(vertex, rgb),
+                .location = 1,
+            }
+    };
+    VkVertexInputBindingDescription bindings[] = {
+            {
+                .binding = 0,
+                .stride = sizeof(vertex),
+                .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+            }
+    };
+    VkPipelineVertexInputStateCreateInfo vertexInput = PLCore_Priv_CreateVertexInput(2, attribs, 1, bindings);
+
+    PLCore_GraphicsPipeline Pipeline = PLCore_CreatePipeline(RenderInstance, Renderer, Window, vertexInput, vShader, fShader);
+
+    PLCore_Buffer vertexBuffer = PLCore_CreateGPUBuffer(RenderInstance, sizeof(vertex) * 3, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertices);
+
+    uint32_t fps = 0;
+    clock_t timer = clock();
+
+    while(!glfwWindowShouldClose(Window.window)) {
+        glfwPollEvents();
+        PLCore_BeginFrame(RenderInstance, &Renderer, Window);
+
+        VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
+
+        vkCmdBindPipeline(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.pipeline);
+        VkDeviceSize offsets[] = {0};
+        vkCmdBindVertexBuffers(activeBuffer, 0, 1, &vertexBuffer.buffer, offsets);
+        vkCmdDraw(activeBuffer, 3, 1, 0, 0);
+
+        PLCore_EndFrame(RenderInstance, &Renderer);
+        glfwSwapBuffers(Window.window);
+        fps++;
+        if (clock()-timer > 1000) {
+            timer = clock();
+            printf("FPS: %u\n", fps);
+            fps = 0;
+        }
+    }
+
 
     return 0;
 }
-
