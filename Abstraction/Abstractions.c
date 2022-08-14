@@ -11,10 +11,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback( VkDebugUtilsMessageSeverity
     if (messageSeverity > VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) printf("[Vk]: %s\n\n",pCallbackData->pMessage);
     return VK_FALSE;
 }
-static VkDebugUtilsMessengerEXT debugMessenger;
+static VkDebugUtilsMessengerEXT s_DebugMessenger;
 
-static VkPhysicalDeviceMemoryProperties memoryProperties;
-static int collectedMemoryProperties = 0;
+static VkPhysicalDeviceMemoryProperties s_PhysicalDeviceMemoryProperties;
+static VkPhysicalDeviceProperties s_PhysicalDeviceProperties;
+static int s_CollectedPhysicalDeviceProperties = 0;
 
 
 VkInstance createInstance() {
@@ -78,7 +79,7 @@ VkInstance createInstance() {
 
 #ifdef PL_Debug
     PFN_vkCreateDebugUtilsMessengerEXT debugMessengerCreation = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(Instance, "vkCreateDebugUtilsMessengerEXT");
-    debugMessengerCreation(Instance, &debugInfo, VK_NULL_HANDLE, &debugMessenger);
+    debugMessengerCreation(Instance, &debugInfo, VK_NULL_HANDLE, &s_DebugMessenger);
 #endif
 
     return Instance;
@@ -86,7 +87,7 @@ VkInstance createInstance() {
 void destroyInstance(VkInstance* instance) {
 #ifdef PL_Debug
     PFN_vkDestroyDebugUtilsMessengerEXT debugMessengerDestruction = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(*instance, "vkDestroyDebugUtilsMessengerEXT");
-    debugMessengerDestruction(*instance, debugMessenger, VK_NULL_HANDLE);
+    debugMessengerDestruction(*instance, s_DebugMessenger, VK_NULL_HANDLE);
 #endif
     vkDestroyInstance(*instance, VK_NULL_HANDLE);
     glfwTerminate();
@@ -105,14 +106,20 @@ VkPhysicalDevice createPhysicalDevice(VkInstance instance) {
     }
     free(devices);
 
-    if (!collectedMemoryProperties) {
-        vkGetPhysicalDeviceMemoryProperties(PhysicalDevice, &memoryProperties);
-        collectedMemoryProperties = 1;
-    }
 
+
+    if (!s_CollectedPhysicalDeviceProperties) {
+        vkGetPhysicalDeviceMemoryProperties(PhysicalDevice, &s_PhysicalDeviceMemoryProperties);
+        vkGetPhysicalDeviceProperties(PhysicalDevice, &s_PhysicalDeviceProperties);
+        printf("Max Descriptors: %u\n", s_PhysicalDeviceProperties.limits.maxBoundDescriptorSets);
+        s_CollectedPhysicalDeviceProperties = 1;
+    }
+    InitializeBufferInfo(PhysicalDevice);
 
     return PhysicalDevice;
 }
+
+VkPhysicalDeviceProperties GetPhysicalDeviceProperties() { return s_PhysicalDeviceProperties; }
 
 
 static int isQueueInfoCollected = 0;
@@ -173,6 +180,10 @@ VkDevice createDevice(VkPhysicalDevice physicalDevice) {
         }
     }
 
+    VkPhysicalDeviceFeatures features;
+    vkGetPhysicalDeviceFeatures(physicalDevice, &features);
+    features.samplerAnisotropy = VK_TRUE;
+
     VkDeviceCreateInfo deviceInfo;
     deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceInfo.pNext = VK_NULL_HANDLE;
@@ -183,7 +194,7 @@ VkDevice createDevice(VkPhysicalDevice physicalDevice) {
     deviceInfo.enabledLayerCount = deviceLayerCount;
     deviceInfo.enabledExtensionCount = deviceExtensionCount;
     deviceInfo.ppEnabledExtensionNames = deviceExtensions;
-    deviceInfo.pEnabledFeatures = VK_NULL_HANDLE;
+    deviceInfo.pEnabledFeatures = &features;
 
     vkCreateDevice(physicalDevice, &deviceInfo, VK_NULL_HANDLE, &Device);
     free(queueFamilyProperties);
@@ -234,153 +245,9 @@ VkCommandBuffer* createCommandBuffers(VkDevice device, VkCommandPool pool, U32 c
 
 
 uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
-    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
-        if ((typeFilter & (1 << i)) && (memoryProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+    for (uint32_t i = 0; i < s_PhysicalDeviceMemoryProperties.memoryTypeCount; i++)
+        if ((typeFilter & (1 << i)) && (s_PhysicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
             return i;
-        }
-    }
-}
-
-Buffer createBuffer(VkDevice device, DeviceQueue queue, VkCommandBuffer commandBuffer, VkFence fence, VkDeviceSize size, VkBufferUsageFlagBits usageFlags, void* data) {
-    Buffer Buffer, StagingBuffer;
-
-    VkBufferCreateInfo stagingInfo;
-    stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    stagingInfo.pNext = VK_NULL_HANDLE;
-    stagingInfo.flags = 0;
-    stagingInfo.size = size;
-    stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    stagingInfo.queueFamilyIndexCount = 1;
-    stagingInfo.pQueueFamilyIndices = &queue.familyIndex;
-    vkCreateBuffer(device, &stagingInfo, VK_NULL_HANDLE, &StagingBuffer.buffer);
-
-    VkMemoryRequirements sBufferRequirements;
-    vkGetBufferMemoryRequirements(device, StagingBuffer.buffer, &sBufferRequirements);
-
-    VkMemoryAllocateInfo sBufferAlloc;
-    sBufferAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    sBufferAlloc.pNext = VK_NULL_HANDLE;
-    sBufferAlloc.allocationSize = sBufferRequirements.size;
-    sBufferAlloc.memoryTypeIndex = findMemoryType(sBufferRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    vkAllocateMemory(device, &sBufferAlloc, VK_NULL_HANDLE, &StagingBuffer.memory);
-    vkBindBufferMemory(device, StagingBuffer.buffer, StagingBuffer.memory, 0);
-
-    void* bufferData;
-    vkMapMemory(device, StagingBuffer.memory, 0, stagingInfo.size, 0, &bufferData);
-    memcpy(bufferData, data, (VkDeviceSize) stagingInfo.size);
-    vkUnmapMemory(device, StagingBuffer.memory);
-
-    VkBufferCreateInfo bufferInfo;
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.pNext = VK_NULL_HANDLE;
-    bufferInfo.flags = 0;
-    bufferInfo.size = size;
-    bufferInfo.usage = usageFlags | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    bufferInfo.queueFamilyIndexCount = 1;
-    bufferInfo.pQueueFamilyIndices = &queue.familyIndex;
-
-    vkCreateBuffer(device, &bufferInfo, VK_NULL_HANDLE, &Buffer.buffer);
-
-    Buffer.bufferInfo.buffer = Buffer.buffer;
-    Buffer.bufferInfo.range = size;
-    Buffer.bufferInfo.offset = 0;
-
-    VkMemoryRequirements bufferRequirements;
-    vkGetBufferMemoryRequirements(device, Buffer.buffer, &bufferRequirements);
-
-    VkMemoryAllocateInfo BufferAlloc;
-    BufferAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    BufferAlloc.pNext = VK_NULL_HANDLE;
-    BufferAlloc.allocationSize = bufferRequirements.size;
-    BufferAlloc.memoryTypeIndex = findMemoryType(bufferRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    vkAllocateMemory(device, &BufferAlloc, VK_NULL_HANDLE, &Buffer.memory);
-    vkBindBufferMemory(device, Buffer.buffer, Buffer.memory, 0);
-
-    VkCommandBufferBeginInfo vertexCopyBeginfo;
-    vertexCopyBeginfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    vertexCopyBeginfo.pNext = VK_NULL_HANDLE;
-    vertexCopyBeginfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vertexCopyBeginfo.pInheritanceInfo = VK_NULL_HANDLE;
-
-
-    vkBeginCommandBuffer(commandBuffer, &vertexCopyBeginfo);
-
-    VkBufferCopy CopyInfo;
-    CopyInfo.size = stagingInfo.size;
-    CopyInfo.srcOffset = 0;
-    CopyInfo.dstOffset = 0;
-    vkCmdCopyBuffer(commandBuffer, StagingBuffer.buffer, Buffer.buffer, 1, &CopyInfo);
-
-    vkEndCommandBuffer(commandBuffer);
-
-    VkSubmitInfo vertexCopySubmitInfo;
-    vertexCopySubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    vertexCopySubmitInfo.pNext = VK_NULL_HANDLE;
-    vertexCopySubmitInfo.waitSemaphoreCount = 0;
-    vertexCopySubmitInfo.pWaitSemaphores = VK_NULL_HANDLE;
-    vertexCopySubmitInfo.pWaitDstStageMask = VK_NULL_HANDLE;
-    vertexCopySubmitInfo.commandBufferCount = 1;
-    vertexCopySubmitInfo.pCommandBuffers = &commandBuffer;
-    vertexCopySubmitInfo.signalSemaphoreCount = 0;
-    vertexCopySubmitInfo.pSignalSemaphores = VK_NULL_HANDLE;
-
-    vkQueueSubmit(queue.queue, 1, &vertexCopySubmitInfo, fence);
-    vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX);
-    vkResetFences(device, 1, &fence);
-
-    destroyBuffer(device, &StagingBuffer);
-
-    return Buffer;
-}
-
-Buffer createBufferWithoutStaging(VkDevice device, VkDeviceSize size, DeviceQueue queue, VkBufferUsageFlagBits usage, VkMemoryPropertyFlagBits memoryFlags) {
-    Buffer Buffer;
-
-    VkBufferCreateInfo bufferInfo;
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.pNext = VK_NULL_HANDLE;
-    bufferInfo.flags = 0;
-    bufferInfo.size = size;
-    bufferInfo.usage = usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    bufferInfo.queueFamilyIndexCount = 1;
-    bufferInfo.pQueueFamilyIndices = &queue.familyIndex;
-
-    vkCreateBuffer(device, &bufferInfo, VK_NULL_HANDLE, &Buffer.buffer);
-
-    Buffer.bufferInfo.buffer = Buffer.buffer;
-    Buffer.bufferInfo.range = size;
-    Buffer.bufferInfo.offset = 0;
-
-    VkMemoryRequirements bufferRequirements;
-    vkGetBufferMemoryRequirements(device, Buffer.buffer, &bufferRequirements);
-
-    VkMemoryAllocateInfo bufferAlloc;
-    bufferAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    bufferAlloc.pNext = VK_NULL_HANDLE;
-    bufferAlloc.allocationSize = bufferRequirements.size;
-    bufferAlloc.memoryTypeIndex = findMemoryType(bufferRequirements.memoryTypeBits, memoryFlags);
-
-    vkAllocateMemory(device, &bufferAlloc, VK_NULL_HANDLE, &Buffer.memory);
-    vkBindBufferMemory(device, Buffer.buffer, Buffer.memory, 0);
-
-    return Buffer;
-}
-
-UniformBuffer* createUniformBuffers(VkDevice device, U32 count, VkDeviceSize size, DeviceQueue queue) {
-    UniformBuffer* Buffer = malloc(sizeof(UniformBuffer) * count);
-    for (U32 i = 0; i < count; i++)
-        Buffer[i] = createBufferWithoutStaging(device, size, queue, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    return Buffer;
-}
-
-void destroyBuffer(VkDevice device, Buffer* buffer) {
-    vkDestroyBuffer(device, buffer->buffer, VK_NULL_HANDLE);
-    vkFreeMemory(device, buffer->memory, VK_NULL_HANDLE);
 }
 
 
@@ -776,7 +643,7 @@ VkPipelineColorBlendStateCreateInfo createColorBlend(U32 attachmentCount, VkPipe
     colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlend.pNext = VK_NULL_HANDLE;
     colorBlend.flags = 0;
-    colorBlend.logicOpEnable = VK_FALSE;
+    colorBlend.logicOpEnable = VK_TRUE; // TODO: does this enable transparency?
     colorBlend.logicOp = VK_LOGIC_OP_COPY;
     colorBlend.attachmentCount = attachmentCount;
     colorBlend.pAttachments = &attachment;
@@ -1039,96 +906,6 @@ VkPipeline createPipelineFromBuilder(VkDevice device, Swapchain swapchain, Pipel
     return pipeline;
 }
 
-// Descriptors
-
-VkDescriptorSetLayoutBinding createNewBinding(U32 slot, VkDescriptorType type, U32 descriptorCount, VkShaderStageFlagBits stages) {
-    VkDescriptorSetLayoutBinding binding;
-    binding.binding = slot;
-    binding.descriptorType = type;
-    binding.descriptorCount = descriptorCount;
-    binding.stageFlags = stages;
-    binding.pImmutableSamplers = VK_NULL_HANDLE;
-    return binding;
-}
-
-VkDescriptorSetLayout createDescriptorLayout(VkDevice device, U32 bindingCount, VkDescriptorSetLayoutBinding* bindings) {
-    VkDescriptorSetLayout layout;
-    VkDescriptorSetLayoutCreateInfo layoutInfo;
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.pNext = VK_NULL_HANDLE;
-    layoutInfo.flags = 0;
-    layoutInfo.bindingCount = bindingCount;
-    layoutInfo.pBindings = bindings;
-
-    vkCreateDescriptorSetLayout(device, &layoutInfo, VK_NULL_HANDLE, &layout);
-    return layout;
-}
-
-VkDescriptorPool createDescriptorPool(VkDevice device, U32 sets, VkDescriptorType type) {
-    VkDescriptorPool pool;
-
-    VkDescriptorPoolSize size;
-    size.type = type;
-    size.descriptorCount = sets;
-
-    VkDescriptorPoolCreateInfo poolInfo;
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.pNext = VK_NULL_HANDLE;
-    poolInfo.flags = 0;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &size;
-    poolInfo.maxSets = sets;
-
-    vkCreateDescriptorPool(device, &poolInfo, VK_NULL_HANDLE, &pool);
-    return pool;
-}
-
-VkDescriptorSet* createDescriptorSet(VkDevice device, U32 count, VkDescriptorType type, VkDescriptorSetLayout layout, VkDescriptorPool* rPool) {
-    VkDescriptorSet* sets = malloc(sizeof(VkDescriptorSet) * count);
-
-     *rPool = createDescriptorPool(device, count, type);
-
-    VkDescriptorSetLayout* descriptorLayouts = malloc(sizeof(VkDescriptorSetLayout) * count);
-    for (U32 i = 0; i < count; i++) descriptorLayouts[i] = layout;
-
-    VkDescriptorSetAllocateInfo allocInfo;
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.pNext = VK_NULL_HANDLE;
-    allocInfo.pSetLayouts = descriptorLayouts;
-    allocInfo.descriptorSetCount = count;
-    allocInfo.descriptorPool = *rPool;
-
-    vkAllocateDescriptorSets(device, &allocInfo, sets);
-
-    free(descriptorLayouts);
-
-    return sets;
-}
-
-void writeDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
-    VkWriteDescriptorSet write;
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.pNext = VK_NULL_HANDLE;
-    write.dstSet = set;
-    write.dstBinding = 0; // if this was an array it would not stay at zero (keep this in mind)
-    write.dstArrayElement = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = type;
-    write.pImageInfo = imageInfo;
-    write.pBufferInfo = bufferInfo;
-    write.pTexelBufferView = VK_NULL_HANDLE;
-
-    vkUpdateDescriptorSets(device, 1, &write, 0, VK_NULL_HANDLE);
-}
-
-void updateUniformBuffer(VkDevice device, VkDeviceMemory* memory, VkDeviceSize size, void* data) {
-    void* uniformUpload;
-    vkMapMemory(device, *memory, 0, size, 0, &uniformUpload);
-    memcpy(uniformUpload, &data, size);
-    vkUnmapMemory(device, *memory);
-}
-
-
 
 void destroyShader(VkDevice device, ShaderFile* shader) {
     free(shader->buffer);
@@ -1197,163 +974,192 @@ void destroySemaphores(VkDevice device, U32 semaphoreCount, VkSemaphore* semapho
 }
 
 
-// Render State
 
+Image createImage(VkDevice device, VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlagBits usage, DeviceQueue queue) {
+    Image image;
 
+    VkImageCreateInfo imageInfo;
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.pNext = VK_NULL_HANDLE;
+    imageInfo.flags = 0;
+    imageInfo.imageType = type;
+    imageInfo.format = format;
+    imageInfo.extent = extent;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = usage;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.queueFamilyIndexCount = 1;
+    imageInfo.pQueueFamilyIndices = &queue.familyIndex;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-#define MAX_DESCRIPTORS_FROM_POOL 100
-static U32 descriptorPoolTypeCount = 10;
-static VkDescriptorPoolSize descriptorPoolSize[] = {
-    {VK_DESCRIPTOR_TYPE_SAMPLER},
-    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER},
-    {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE},
-    {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE},
-    {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER},
-    {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER},
-    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER},
-    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER},
-    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC},
-    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC},
-    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT},
-};
+    vkCreateImage(device, &imageInfo, VK_NULL_HANDLE, &image.image);
 
-static VkDescriptorPool* descriptorPools;
-void initializeDescriptors(VkDevice device) {}
+    VkMemoryRequirements requirements;
+    vkGetImageMemoryRequirements(device, image.image, &requirements);
 
+    VkMemoryAllocateInfo allocInfo;
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.pNext = VK_NULL_HANDLE;
+    allocInfo.allocationSize = requirements.size;
+    // this means we will be allocating the image to the gpu
+    allocInfo.memoryTypeIndex = findMemoryType(requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
+    vkAllocateMemory(device, &allocInfo, VK_NULL_HANDLE, &image.memory);
+    vkBindImageMemory(device, image.image, image.memory, 0);
 
+    VkImageViewCreateInfo viewInfo;
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.pNext = VK_NULL_HANDLE;
+    viewInfo.flags = 0;
+    viewInfo.image = image.image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+    viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.levelCount = 1;
 
-RenderState createRenderStateBase() {
-    RenderState renderState;
-    renderState.transferBufferCount = 5;
-    renderState.backBufferCount = 2;
-    renderState.activeBackBuffer = 0;
+    vkCreateImageView(device, &viewInfo, VK_NULL_HANDLE, &image.view);
 
-
-    renderState.instance = createInstance();
-    renderState.physicalDevice = createPhysicalDevice(renderState.instance);
-
-    renderState.graphicsIndices = requestDeviceQueue(renderState.physicalDevice, VK_QUEUE_GRAPHICS_BIT, 1.0f);
-    renderState.transferIndices = requestDeviceQueue(renderState.physicalDevice, VK_QUEUE_TRANSFER_BIT, 1.0f);
-
-    renderState.device = createDevice(renderState.physicalDevice);
-
-    getQueue(renderState.device, &renderState.graphicsIndices);
-    getQueue(renderState.device, &renderState.transferIndices);
-
-    renderState.transferPool = createCommandPool(renderState.device, renderState.transferIndices.familyIndex, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
-    renderState.transferBuffers = createCommandBuffers(renderState.device, renderState.transferPool,  renderState.transferBufferCount);
-    renderState.transferFence = createFences(renderState.device, renderState.transferBufferCount);
-
-    renderState.window = glfwCreateWindow(800, 600, "Application", VK_NULL_HANDLE, VK_NULL_HANDLE);
-    glfwCreateWindowSurface(renderState.instance, renderState.window, VK_NULL_HANDLE, &renderState.surface);
-    renderState.extent = getSurfaceExtent(renderState.window);
-    return renderState;
+    image.requiredSize = requirements.size;
+    return image;
+}
+void destroyImage(VkDevice device, Image image) {
+    vkDestroyImageView(device, image.view, VK_NULL_HANDLE);
+    vkDestroyImage(device, image.image, VK_NULL_HANDLE);
+    vkFreeMemory(device, image.memory, VK_NULL_HANDLE);
 }
 
-void createRenderStateObjects(RenderState* renderState, U32 shaderCount, VkPipelineShaderStageCreateInfo* shaders, VkPipelineVertexInputStateCreateInfo vertexInput, VkPipelineLayoutCreateInfo pipelineLayout) {
+void TransitionTextureLayout(VkDevice device, Buffer buffer, Image image, U32 queueFamily, VkExtent3D extent) {
+    VkCommandBuffer cmd = AcquireGlobalCommandBuffer(device);
 
-    renderState->swapchain = createSwapchain(renderState->device, renderState->physicalDevice, renderState->surface, renderState->extent, renderState->graphicsIndices.familyIndex, 1);
-    renderState->framebuffers = createFramebufferInfo(renderState->device, &renderState->swapchain);
+    VkCommandBufferBeginInfo beginInfo;
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.pNext = VK_NULL_HANDLE;
+    beginInfo.flags = 0;
+    beginInfo.pInheritanceInfo = VK_NULL_HANDLE;
 
-    createFramebuffers(renderState->device, renderState->renderPass.renderPass, renderState->swapchain, &renderState->framebuffers);
+    vkBeginCommandBuffer(cmd, &beginInfo);
 
-    PipelineBuilder pipelineBuilder = newPipelineBuilder();
-    addShadersToPipelineBuilder(&pipelineBuilder, shaderCount, shaders);
-    addVertexInputToPipelineBuilder(&pipelineBuilder, vertexInput);
+    VkImageMemoryBarrier barrier;
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.pNext = VK_NULL_HANDLE;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.srcQueueFamilyIndex = queueFamily;
+    barrier.dstQueueFamilyIndex = queueFamily;
+    barrier.image = image.image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.levelCount = 1;
 
-    vkCreatePipelineLayout(renderState->device, &pipelineLayout, VK_NULL_HANDLE, &renderState->pipelineLayout);
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier);
 
-    addPipelineLayoutToPipelineBuilder(&pipelineBuilder, renderState->pipelineLayout);
-    addExtent2dToPipelineBuilder(&pipelineBuilder, renderState->swapchain.extent);
+    VkBufferImageCopy copy;
+    copy.bufferOffset = 0;
+    copy.bufferRowLength = 0;
+    copy.bufferImageHeight = 0;
+    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.imageSubresource.layerCount = 1;
+    copy.imageSubresource.baseArrayLayer = 0;
+    copy.imageSubresource.mipLevel = 0;
+    copy.imageOffset = (VkOffset3D){0,0,0};
+    copy.imageExtent = extent;
 
-    createPipelineFromBuilder(renderState->device, renderState->swapchain, &pipelineBuilder);
+    vkCmdCopyBufferToImage(cmd, buffer.buffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
-    renderState->renderPool = createCommandPool(renderState->device, renderState->graphicsIndices.familyIndex, 0);
-    renderState->renderBuffers = createCommandBuffers(renderState->device, renderState->renderPool, renderState->swapchain.swapchainImageCount);
+    VkImageMemoryBarrier finalBarrier = barrier;
+    finalBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    finalBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    finalBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    finalBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-    renderState->renderFence = createFences(renderState->device, renderState->backBufferCount);
-    renderState->waitSemaphore = createSemaphores(renderState->device, renderState->backBufferCount);
-    renderState->signalSemaphore = createSemaphores(renderState->device, renderState->backBufferCount);
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &finalBarrier);
+    vkEndCommandBuffer(cmd);
+    GlobalSubmit(cmd);
+}
+// TODO: Make Texture Consume Descriptor Set (Instead Of Creating A New Descriptor)
+Texture CreateTexture(VkDevice device, DeviceQueue queue, VkDescriptorSet set, U32 setBinding, const char* path) {
+    int32_t width, height, channels;
+    void* pixels = stbi_load(path, &width, &height, &channels, STBI_rgb_alpha);
+    if (pixels == VK_NULL_HANDLE) fprintf(stderr, "%s", "big sad: loading images\n");
+
+    VkDeviceSize imageSize = width * height * 4;
+    VkFormat imageFormat = VK_FORMAT_R8G8B8A8_SRGB;
+    VkExtent3D imageExtent = (VkExtent3D){width, height, 1};
+
+    Image textureImage = createImage(device, VK_IMAGE_TYPE_2D, imageFormat, imageExtent, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, queue);
+
+    Buffer stagingBuffer = CreateBuffer(device, imageSize, queue.familyIndex, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, CPU_COHERENT | CPU_VISIBLE);
+
+    UploadDataToBuffer(device, &stagingBuffer, imageSize, pixels);
+
+    stbi_image_free(pixels);
+
+
+
+
+
+    TransitionTextureLayout(device, stagingBuffer, textureImage, queue.familyIndex, imageExtent);
+
+    Texture texture;
+    texture.image = textureImage;
+    texture.set = set;
+    texture.index = -1; //Because We Dont Know/Need An Index Currently
+
+    destroyBuffer(device, &stagingBuffer);
+
+    return texture;
 }
 
 
 
-//Buffer createBufferFromRenderState(VkBufferUsageFlagBits usage) {}
+VkSampler createSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode) {
+    VkSampler sampler;
 
+    VkSamplerCreateInfo samplerInfo;
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.pNext = VK_NULL_HANDLE;
+    samplerInfo.flags = 0;
+    samplerInfo.magFilter = filter;
+    samplerInfo.minFilter = filter;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.addressModeU = addressMode;
+    samplerInfo.addressModeV = addressMode;
+    samplerInfo.addressModeW = addressMode;
+    samplerInfo.mipLodBias = 0.0f;
 
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = 1.0f;
 
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
-void beginRenderState(RenderState* renderState) {
-    VkResult imageResult = vkAcquireNextImageKHR(renderState->device, renderState->swapchain.swapchain, UINT64_MAX, renderState->waitSemaphore[renderState->activeBackBuffer], VK_NULL_HANDLE, &renderState->imageIndex);
-
-    vkWaitForFences(renderState->device, 1, &renderState->renderFence[renderState->activeBackBuffer], VK_TRUE, UINT64_MAX);
-    vkResetFences(renderState->device, 1, &renderState->renderFence[renderState->activeBackBuffer]);
-
-    VkScissor scissor = createScissor(renderState->swapchain.extent);
-
-    beginFrameRecording(&renderState->renderBuffers[renderState->imageIndex], renderState->renderPass, renderState->framebuffers.framebuffer[renderState->imageIndex], scissor);
-    vkCmdBindPipeline(renderState->renderBuffers[renderState->imageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, renderState->graphicsPipeline);
+    vkCreateSampler(device, &samplerInfo, VK_NULL_HANDLE, &sampler);
+    return sampler;
 }
 
-void endRenderState(RenderState* renderState) {
-    endFrameRecording(&renderState->renderBuffers[renderState->imageIndex]);
-}
-
-void drawRenderState(RenderState* renderState) {
-
-    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-
-    VkSubmitInfo submitInfo;
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.pNext = VK_NULL_HANDLE;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &renderState->waitSemaphore[renderState->activeBackBuffer];
-    submitInfo.pWaitDstStageMask = waitStages;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &renderState->renderBuffers[renderState->imageIndex];
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &renderState->signalSemaphore[renderState->activeBackBuffer];
-
-
-    vkQueueSubmit(renderState->graphicsQueue, 1, &submitInfo, renderState->renderFence[renderState->activeBackBuffer]);
-
-    VkResult presentationResult;
-    VkPresentInfoKHR presentInfo;
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.pNext = VK_NULL_HANDLE;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderState->signalSemaphore[renderState->activeBackBuffer];
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = &renderState->swapchain.swapchain;
-    presentInfo.pImageIndices = &renderState->imageIndex;
-    presentInfo.pResults = &presentationResult;
-
-    VkResult renderResult = vkQueuePresentKHR(renderState->graphicsQueue, &presentInfo);
-    if (renderResult == VK_ERROR_OUT_OF_DATE_KHR || renderResult == VK_SUBOPTIMAL_KHR) {}
-
-
+void destroySampler(VkDevice device, VkSampler sampler) {
+    vkDestroySampler(device, sampler, VK_NULL_HANDLE);
 }
 
 
 
 
 
-
-
-void destroyRenderState(RenderState* renderState) {
-    destroyFences(renderState->device, renderState->backBufferCount, renderState->renderFence);
-    destroySemaphores(renderState->device, renderState->backBufferCount, renderState->waitSemaphore);
-    destroySemaphores(renderState->device, renderState->backBufferCount, renderState->signalSemaphore);
-
-    destroyFramebufferContainer(renderState->device, renderState->swapchain, &renderState->framebuffers);
-    vkDestroyCommandPool(renderState->device, renderState->transferPool, VK_NULL_HANDLE);
-    vkDestroyCommandPool(renderState->device, renderState->renderPool, VK_NULL_HANDLE);
-    vkDestroyPipeline(renderState->device, renderState->graphicsPipeline, VK_NULL_HANDLE);
-    vkDestroyRenderPass(renderState->device, renderState->renderPass.renderPass, VK_NULL_HANDLE);
-
-    destroySwapchain(renderState->device, &renderState->swapchain);
-    vkDestroySurfaceKHR(renderState->instance, renderState->surface, VK_NULL_HANDLE);
-    destroyInstance(&renderState->instance);
-    glfwDestroyWindow(renderState->window);
-}

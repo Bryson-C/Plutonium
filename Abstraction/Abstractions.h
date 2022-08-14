@@ -5,23 +5,50 @@
 #ifndef PLUTONIUM_ABSTRACTIONS_H
 #define PLUTONIUM_ABSTRACTIONS_H
 
+// TODO: Clean Up Code
+// TODO: Make Code PascalCase
+// TODO: Mark Engine Only Code (aka Code Users Should Not Interact With)
+// TODO: Add Documentation
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <stdbool.h>
 
+#include "../lib/stb_image.h"
 #include "vulkan/vulkan.h"
 #include "glfw3.h"
+
+#include "Globals.h"
+#include "Buffers.h"
+#include "Descriptors.h"
+
 
 typedef uint32_t U32;
 typedef int32_t I32;
 #define PL_Debug 1
 
 // Others
+
+inline I32 RandomInt(I32 from, I32 to)
+{
+    srand(clock());
+    return rand()%to+from;
+}
+inline float RandomFloat(int from, int to)
+{
+    srand(clock());
+    return (float)(rand()%to+from);
+}
+
 VkFence* createFences(VkDevice device, U32 count);
 VkSemaphore* createSemaphores(VkDevice device, U32 count);
 
 void destroyFences(VkDevice device, U32 fenceCount, VkFence* fences);
 void destroySemaphores(VkDevice device, U32 semaphoreCount, VkSemaphore* semaphores);
+
+uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
 
 // Instance
@@ -35,6 +62,8 @@ struct DeviceQueue_t { U32 familyIndex, queueIndex; VkQueue queue; };
 typedef struct DeviceQueue_t DeviceQueue;
 
 VkPhysicalDevice createPhysicalDevice(VkInstance instance);
+VkPhysicalDeviceProperties GetPhysicalDeviceProperties();
+
 VkDevice createDevice(VkPhysicalDevice physicalDevice);
 DeviceQueue requestDeviceQueue(VkPhysicalDevice physicalDevice, VkQueueFlagBits flags, float priority);
 void getQueue(VkDevice device, DeviceQueue* queue);
@@ -45,27 +74,6 @@ void destroyDevice();
 
 VkCommandPool createCommandPool(VkDevice device, U32 queueFamily, U32 flags);
 VkCommandBuffer* createCommandBuffers(VkDevice device, VkCommandPool pool, U32 count);
-
-// Buffers
-struct Buffer_t { VkBuffer buffer; VkDeviceMemory memory; VkDescriptorBufferInfo bufferInfo; };
-typedef struct Buffer_t Buffer;
-typedef struct Buffer_t UniformBuffer;
-
-Buffer createBuffer(VkDevice device, DeviceQueue queue,
-                    VkCommandBuffer commandBuffer,
-                    VkFence fence, VkDeviceSize size,
-                    VkBufferUsageFlagBits usageFlags, void* data);
-
-Buffer createBufferWithoutStaging(VkDevice device, VkDeviceSize size, DeviceQueue queue, VkBufferUsageFlagBits usage, VkMemoryPropertyFlagBits memoryFlags);
-
-UniformBuffer* createUniformBuffers(VkDevice device, U32 count, VkDeviceSize size, DeviceQueue queue);
-
-
-
-void destroyBuffer(VkDevice device, Buffer* buffer);
-
-
-
 
 
 
@@ -229,16 +237,7 @@ void destroyShader(VkDevice device, ShaderFile* shader);
 
 // Descriptors
 
-VkDescriptorSetLayoutBinding createNewBinding(U32 slot, VkDescriptorType type, U32 descriptorCount, VkShaderStageFlagBits stages);
-VkDescriptorSetLayout createDescriptorLayout(VkDevice device, U32 bindingCount, VkDescriptorSetLayoutBinding* bindings);
-VkDescriptorSet* createDescriptorSet(VkDevice device, U32 count, VkDescriptorType type, VkDescriptorSetLayout layouts, VkDescriptorPool* rPool);
-void writeDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
 
-void updateUniformBuffer(VkDevice device, VkDeviceMemory* memory, VkDeviceSize size, void* data);
-
-void destroyDescriptorPool();
-void destroyDescriptorSets();
-void destroyDescriptorLayout();
 
 
 // TODO: ShaderC
@@ -250,65 +249,28 @@ void beginFrameRecording(VkCommandBuffer* buffer, RenderPass renderPass, VkFrame
 void endFrameRecording(VkCommandBuffer* buffer);
 
 
-// Render State
+typedef struct {
+    VkImage image;
+    VkImageView view;
+    VkDeviceMemory memory;
+    VkDeviceSize requiredSize;
+} Image;
+
+typedef struct {
+    Image image;
+    VkDescriptorSet set;
+    int32_t index;
+} Texture;
 
 
+Image createImage(VkDevice device, VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlagBits usage, DeviceQueue queue);
+void destroyImage(VkDevice device, Image image);
+
+Texture CreateTexture(VkDevice device, DeviceQueue queue, VkDescriptorSet set, U32 setBinding, const char* path);
+void DestroyTexture(VkDevice device, Texture* texture);
 
 
-
-U32 requestShaderFromRenderState(const char* path, const char* entryPoint, VkShaderStageFlagBits stage);
-ShaderFile getShaderFromRenderState(U32 index);
-
-
-struct RenderState_t {
-    U32 backBufferCount, transferBufferCount;
-
-    VkInstance instance;
-    VkPhysicalDevice physicalDevice;
-    VkDevice device;
-    DeviceQueue graphicsIndices, transferIndices;
-    VkQueue graphicsQueue, transferQueue;
-    VkCommandBuffer* transferBuffers, *renderBuffers;
-    VkCommandPool transferPool, renderPool;
-
-    GLFWwindow* window;
-    VkExtent2D extent;
-    VkSurfaceKHR surface;
-
-    Swapchain swapchain;
-    FramebufferContainer framebuffers;
-
-    RenderPass renderPass;
-    VkPipelineLayout pipelineLayout;
-    VkPipeline graphicsPipeline;
-
-    VkFence* renderFence, *transferFence;
-    VkSemaphore* waitSemaphore, *signalSemaphore;
-    U32 activeBackBuffer, imageIndex;
-
-    // buffers need to be handled by user
-};
-
-typedef struct RenderState_t RenderState;
-
-RenderState createRenderStateBase();
-void createRenderStateRenderObjects(RenderState* renderState,
-                                    U32 shaderCount,
-                                    VkPipelineShaderStageCreateInfo* shaders,
-                                    VkPipelineVertexInputStateCreateInfo vertexInput,
-                                    VkPipelineLayoutCreateInfo pipelineLayout);
-
-
-Buffer createBufferFromRenderState(RenderState* renderState);
-
-
-
-void beginRenderState(RenderState* renderState);
-void endRenderState(RenderState* renderState);
-void drawRenderState(RenderState* renderState);
-void destroyRenderState(RenderState* renderState);
-
-
-
+VkSampler createSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode);
+void destroySampler(VkDevice device, VkSampler sampler);
 
 #endif //PLUTONIUM_ABSTRACTIONS_H
