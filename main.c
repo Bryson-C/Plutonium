@@ -79,7 +79,8 @@ Buffer RequestBufferFromGlobalIndices()
 #include "Abstraction/PlutoniumCore/PlutoniumCore.h"
 
 #include "Abstraction/PlutoniumCore/WrenScript.h"
-
+#define NK_IMPLEMENTATION
+#include "lib/Nuklear/Nuklear-master/nuklear.h"
 
 int main() {
 /*
@@ -170,7 +171,7 @@ int main() {
 */
 
     // remove If You Want The Rendering Code
-    return wrenMain("D:\\Plutonium\\wren.wren");
+    //return wrenMain("D:\\Plutonium\\wren.wren");
 
     PLCore_RenderInstance RenderInstance = PLCore_CreateRenderingInstance();
     PLCore_Window Window = PLCore_CreateWindow(RenderInstance.pl_instance.instance, 800, 600);
@@ -184,11 +185,17 @@ int main() {
         float rgb[3];
     } vertex;
 
-    vertex* vertices = malloc(sizeof(vertex) * 3);
-    vertices[0] = (vertex){{0.0f, -0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}};
-    vertices[1] = (vertex){{0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}};
-    vertices[2] = (vertex){{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}};
 
+
+    vertex vertices[] = {
+        {{0.0f, -0.5f, 0.0f}, {1.0f, 1.0f,  1.0f}},
+        {{ 0.5f, 0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }},
+        {{ -0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }},
+    };
+
+    PLCore_DynamicSizedBuffer dynVertexBuffer = PLCore_CreateDynamicSizedBuffer();
+    PLCore_PushVerticesToDynamicSizedBuffer(&dynVertexBuffer, sizeof(vertex), 3, vertices);
+    PLCore_Buffer vertexBuffer = PLCore_RequestDynamicSizedBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(vertex));
 
 
 
@@ -218,10 +225,9 @@ int main() {
 
     PLCore_GraphicsPipeline Pipeline = PLCore_CreatePipeline(RenderInstance, Renderer, Window, vertexInput, vShader, fShader);
 
-    PLCore_Buffer vertexBuffer = PLCore_CreateGPUBuffer(RenderInstance, sizeof(vertex) * 3, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertices);
-
     uint32_t fps = 0;
     clock_t timer = clock();
+
 
     while(!glfwWindowShouldClose(Window.window)) {
         glfwPollEvents();
