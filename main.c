@@ -76,11 +76,13 @@ Buffer RequestBufferFromGlobalIndices()
 }
 */
 
+
+
 #include "Abstraction/PlutoniumCore/PlutoniumCore.h"
 
 #include "Abstraction/PlutoniumCore/WrenScript.h"
-#define NK_IMPLEMENTATION
-#include "lib/Nuklear/Nuklear-master/nuklear.h"
+
+
 
 int main() {
 /*
@@ -173,29 +175,39 @@ int main() {
     // remove If You Want The Rendering Code
     //return wrenMain("D:\\Plutonium\\wren.wren");
 
+
     PLCore_RenderInstance RenderInstance = PLCore_CreateRenderingInstance();
     PLCore_Window Window = PLCore_CreateWindow(RenderInstance.pl_instance.instance, 800, 600);
     PLCore_Renderer Renderer = PLCore_CreateRenderer(RenderInstance, Window);
 
+
     PLCore_ShaderModule vShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\v.spv", "main");
     PLCore_ShaderModule fShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\f.spv", "main");
-
-    typedef struct {
-        float xyz[3];
-        float rgb[3];
-    } vertex;
+    s_GlobalVertexShader = vShader;
+    s_GlobalFragmentShader = fShader;
 
 
-
-    vertex vertices[] = {
-        {{0.0f, -0.5f, 0.0f}, {1.0f, 1.0f,  1.0f}},
+    // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
+    PLCore_vertex vertices[] = {
+        {{ 0.0f, -0.5f, 0.0f}, {1.0f, 1.0f,  1.0f}},
         {{ 0.5f, 0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }},
         {{ -0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }},
+
+        {{0.0f-1.0f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f }},
+        {{ 0.5f-1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
+        {{ -0.5f-1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
+    };
+
+    PLCore_vertex verts2[] = {
+            {{ 0.0f+1.0f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f }},
+            {{ 0.5f+1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
+            {{ -0.5f+1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
     };
 
     PLCore_DynamicSizedBuffer dynVertexBuffer = PLCore_CreateDynamicSizedBuffer();
-    PLCore_PushVerticesToDynamicSizedBuffer(&dynVertexBuffer, sizeof(vertex), 3, vertices);
-    PLCore_Buffer vertexBuffer = PLCore_RequestDynamicSizedBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(vertex));
+    PLCore_PushVerticesToDynamicSizedBuffer(&dynVertexBuffer, sizeof(PLCore_vertex), 6, vertices);
+    PLCore_PushVerticesToDynamicSizedBuffer(&dynVertexBuffer, sizeof(PLCore_vertex), 3, verts2);
+    PLCore_Buffer vertexBuffer = PLCore_RequestDynamicSizedBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_vertex));
 
 
 
@@ -204,20 +216,20 @@ int main() {
             {
                 .binding = 0,
                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                .offset = offsetof(vertex, xyz),
+                .offset = offsetof(PLCore_vertex, xyz),
                 .location = 0,
             },
             {
                 .binding = 0,
                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                .offset = offsetof(vertex, rgb),
+                .offset = offsetof(PLCore_vertex, rgb),
                 .location = 1,
             }
     };
     VkVertexInputBindingDescription bindings[] = {
             {
                 .binding = 0,
-                .stride = sizeof(vertex),
+                .stride = sizeof(PLCore_vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
             }
     };
@@ -227,23 +239,55 @@ int main() {
 
     uint32_t fps = 0;
     clock_t timer = clock();
+    clock_t buttonCooldown = clock();
 
 
     while(!glfwWindowShouldClose(Window.window)) {
+        // If The Vertex Data Has Been Updated
+        if (glfwGetMouseButton(Window.window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && clock() - buttonCooldown > 200) {
+            buttonCooldown = clock();
+            double xMouse;
+            glfwGetCursorPos(Window.window, &xMouse, VK_NULL_HANDLE);
+            srand((size_t)xMouse + clock());
+
+            float xOffset = ((float)(rand() % 200)/200.0f)-0.5f, yOffset = ((float)(rand() % 200)/200.0f)-0.5f;
+            float
+            colx = (float)sin(clock()%100),
+            coly = (float)sin(clock()%50),
+            colz = (float)sin(clock()%30);
+
+            PLCore_vertex verts[] = {
+                    {{ 0.0f+xOffset, -0.5f+yOffset, 0.0f}, { colx, 1.0f,  1.0f }},
+                    {{ 0.5f+xOffset, 0.5f+yOffset, 0.0f }, { 0.0f, coly, 0.0f }},
+                    {{ -0.5f+xOffset, 0.5f+yOffset, 0.0f }, { 0.0f, 0.0f, colz }},
+            };
+            PLCore_PushVerticesToDynamicSizedBuffer(&dynVertexBuffer, sizeof(PLCore_vertex), 3, verts);
+        } else if (glfwGetMouseButton(Window.window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && clock() - buttonCooldown > 200) {
+            PLCore_ClearDynamicSizedBufferData(&dynVertexBuffer);
+        }
+        if (dynVertexBuffer.dataChanged == 1) {
+            vertexBuffer = PLCore_RequestDynamicSizedBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_vertex));
+        }
+
         glfwPollEvents();
-        PLCore_BeginFrame(RenderInstance, &Renderer, Window);
+
+        PLCore_BeginFrame(RenderInstance, &Renderer, &Pipeline, &Window);
 
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
 
         vkCmdBindPipeline(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.pipeline);
         VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(activeBuffer, 0, 1, &vertexBuffer.buffer, offsets);
-        vkCmdDraw(activeBuffer, 3, 1, 0, 0);
 
-        PLCore_EndFrame(RenderInstance, &Renderer);
+        vkCmdDraw(activeBuffer, dynVertexBuffer.dataCount, 1, 0, 0);
+
+
+        PLCore_EndFrame(RenderInstance, &Renderer, &Pipeline, &Window);
         glfwSwapBuffers(Window.window);
+
         fps++;
         if (clock()-timer > 1000) {
+            printf("Drawing %zi Vertices\n", dynVertexBuffer.dataCount);
             timer = clock();
             printf("FPS: %u\n", fps);
             fps = 0;

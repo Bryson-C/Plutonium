@@ -89,8 +89,8 @@ typedef struct {
     uint32_t backBuffers;
     uint32_t priv_activeFrame;
     uint32_t priv_imageIndex;
-    VkSemaphore* priv_waitSemahores;
-    VkSemaphore* priv_signalSemahores;
+    VkSemaphore* priv_waitSemaphores;
+    VkSemaphore* priv_signalSemaphores;
     VkFence* priv_renderFences;
 
 } PLCore_Renderer;
@@ -166,13 +166,19 @@ PLCore_RenderInstance   PLCore_CreateRenderingInstance();
 PLCore_Window           PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t height);
 PLCore_Renderer         PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window);
 PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader);
+
+PLCore_ShaderModule s_GlobalVertexShader;
+PLCore_ShaderModule s_GlobalFragmentShader;
+PLCore_GraphicsPipeline PLCore_CreatePipelineFromBuilder(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, PLCore_PipelineBuilder builder);
+
 PLCore_Buffer           PLCore_CreateBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage);
 PLCore_Buffer           PLCore_CreateGPUBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage, void* data);
 VkCommandBuffer         PLCore_ActiveRenderBuffer(PLCore_Renderer renderer);
 
 
-void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_Window window);
-void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer);
+void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window);
+void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window);
+
 
 PLCore_PipelineBuilder PLCore_Priv_CreateBlankPipelineBuilder();
 void PLCore_Priv_AddShadersToPipelineBuilder(PLCore_PipelineBuilder* builder, uint32_t shaderCount, VkPipelineShaderStageCreateInfo* shaders);
@@ -209,8 +215,18 @@ VkBuffer                    PLCore_Priv_CreateGPUBuffer(VkDevice device, VkPhysi
 void                        PLCore_UploadDataToBuffer(VkDevice device, VkDeviceMemory* memory, VkDeviceSize size, void* data);
 
 typedef struct {
+    float xyz[3];
+    float rgb[3];
+} PLCore_vertex;
+
+// TODO: Maybe Dont Use A Macro, But Users Shouldn't Bitch If It Works
+#ifndef PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE
+    #define PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE PLCore_vertex*
+#endif
+
+typedef struct {
     PLCore_Buffer buffer;
-    void* data;
+    PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE data;
     size_t dataCount;
     size_t dataSize;
     int dataChanged;
@@ -218,8 +234,10 @@ typedef struct {
 
 
 PLCore_DynamicSizedBuffer   PLCore_CreateDynamicSizedBuffer();
-void                        PLCore_PushVerticesToDynamicSizedBuffer(PLCore_DynamicSizedBuffer* buffer, size_t elementSize, size_t elementCount, void* data);
+void                        PLCore_PushVerticesToDynamicSizedBuffer(PLCore_DynamicSizedBuffer* buffer, size_t elementSize, size_t elementCount, PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE data);
 PLCore_Buffer               PLCore_RequestDynamicSizedBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicSizedBuffer* buffer, VkBufferUsageFlagBits usage, size_t elementSize);
+void                        PLCore_ClearDynamicSizedBufferData(PLCore_DynamicSizedBuffer* buffer);
+
 
 
 

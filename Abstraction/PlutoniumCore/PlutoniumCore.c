@@ -805,6 +805,15 @@ VkPipeline PLCore_Priv_CreatePipelineFromBuilder(VkDevice device, PLCore_Pipelin
         assert(1);
     }
 
+/*
+    VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            .pNext = VK_NULL_HANDLE,
+            .flags = 0,
+            .dynamicStateCount = 0,
+            .pDynamicStates = VK_NULL_HANDLE,
+    };
+*/
 
     VkGraphicsPipelineCreateInfo pipelineInfo;
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -954,6 +963,10 @@ static void EndFrameRecording(VkCommandBuffer buffer) {
     vkEndCommandBuffer(buffer);
 }
 
+
+PLCore_ShaderModule s_GlobalVertexShader;
+PLCore_ShaderModule s_GlobalFragementShader;
+
 PLCore_RenderInstance PLCore_CreateRenderingInstance() {
     PLCore_RenderInstance renderInstance;
     renderInstance.pl_instance.instance = PLCore_Priv_CreateInstance(&renderInstance.pl_instance.priv_Messenger);
@@ -1027,8 +1040,8 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
     renderer.backBuffers = 2;
     renderer.priv_activeFrame = 0;
     renderer.priv_renderFences = malloc(sizeof(VkFence) * renderer.backBuffers);
-    renderer.priv_signalSemahores = malloc(sizeof(VkSemaphore) * renderer.backBuffers);
-    renderer.priv_waitSemahores = malloc(sizeof(VkSemaphore) * renderer.backBuffers);
+    renderer.priv_signalSemaphores = malloc(sizeof(VkSemaphore) * renderer.backBuffers);
+    renderer.priv_waitSemaphores = malloc(sizeof(VkSemaphore) * renderer.backBuffers);
     for (uint32_t i = 0; i < renderer.backBuffers; i++) {
         VkFenceCreateInfo fenceInfo = {
                 .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -1041,8 +1054,8 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
                 .flags = 0,
         };
         vkCreateFence(instance.pl_device.device, &fenceInfo, VK_NULL_HANDLE, &renderer.priv_renderFences[i]);
-        vkCreateSemaphore(instance.pl_device.device, &semaInfo, VK_NULL_HANDLE, &renderer.priv_signalSemahores[i]);
-        vkCreateSemaphore(instance.pl_device.device, &semaInfo, VK_NULL_HANDLE, &renderer.priv_waitSemahores[i]);
+        vkCreateSemaphore(instance.pl_device.device, &semaInfo, VK_NULL_HANDLE, &renderer.priv_signalSemaphores[i]);
+        vkCreateSemaphore(instance.pl_device.device, &semaInfo, VK_NULL_HANDLE, &renderer.priv_waitSemaphores[i]);
     }
 
 
@@ -1073,6 +1086,66 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
     pipeline.pipeline = PLCore_Priv_CreatePipelineFromBuilder(instance.pl_device.device, &builder, &pipeline.layout);
     return pipeline;
 }
+
+// TODO: When Window Resizes The Application Crashes
+PLCore_GraphicsPipeline PLCore_CreatePipelineFromBuilder(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, PLCore_PipelineBuilder builder) {
+    PLCore_GraphicsPipeline pipeline;
+
+    VkPipelineViewportStateCreateInfo viewport = PLCore_Priv_CreateViewportState(window.viewport, window.renderArea);
+    PLCore_Priv_AddViewportStateToPipelineBuilder(&builder, viewport);
+    VkPipelineShaderStageCreateInfo shaders[] = {
+            PLCore_Priv_CreateShaderStage(s_GlobalVertexShader, VK_SHADER_STAGE_VERTEX_BIT),
+            PLCore_Priv_CreateShaderStage(s_GlobalFragementShader, VK_SHADER_STAGE_FRAGMENT_BIT),
+    };
+    PLCore_Priv_AddShadersToPipelineBuilder(&builder, 2, shaders);
+
+    pipeline.pl_builder = builder;
+    pipeline.pipeline = PLCore_Priv_CreatePipelineFromBuilder(instance.pl_device.device, &builder, &pipeline.layout);
+    return pipeline;
+}
+
+
+static void PLCore_CreateRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
+
+    if (window->resolution.width <= 0 || window->resolution.height <= 0 ) glfwWaitEvents();
+
+    glfwCreateWindowSurface(instance.pl_instance.instance, window->window, VK_NULL_HANDLE, &((*window).surface));
+    int32_t windowResX, windowResY;
+    glfwGetWindowSize(window->window, &windowResX, &windowResY);
+    (*window).resolution = (VkExtent2D){.width = windowResX, .height = windowResY};
+
+    *renderer = PLCore_CreateRenderer(instance, *window);
+    *pipeline = PLCore_CreatePipelineFromBuilder(instance, *renderer, *window, pipeline->pl_builder);
+}
+static void PLCore_DestroyRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
+    vkDeviceWaitIdle(instance.pl_device.device);
+
+    for (uint32_t i = 0; i < renderer->backBuffers; i++) {
+        vkDestroyFence(instance.pl_device.device, (*renderer).priv_renderFences[i], VK_NULL_HANDLE);
+        vkDestroySemaphore(instance.pl_device.device, (*renderer).priv_waitSemaphores[i], VK_NULL_HANDLE);
+        vkDestroySemaphore(instance.pl_device.device, (*renderer).priv_signalSemaphores[i], VK_NULL_HANDLE);
+    }
+
+    vkDestroyPipeline(instance.pl_device.device, (*pipeline).pipeline, VK_NULL_HANDLE);
+    vkDestroyPipelineLayout(instance.pl_device.device, (*pipeline).layout, VK_NULL_HANDLE);
+    for (uint32_t i = 0; i < renderer->swapchainImageCount; i++) {
+        //vkDestroyImage(instance.pl_device.device, (*renderer).swapchainImages[i], VK_NULL_HANDLE);
+        //vkDestroyImageView(instance.pl_device.device, (*renderer).swapchainImageViews[i], VK_NULL_HANDLE);
+        vkDestroyFramebuffer(instance.pl_device.device, (*renderer).framebuffers[i], VK_NULL_HANDLE);
+    }
+    vkDestroyRenderPass(instance.pl_device.device, (*renderer).renderPass, VK_NULL_HANDLE);
+    vkDestroyCommandPool(instance.pl_device.device, (*renderer).graphicsPool.pool, VK_NULL_HANDLE);
+    vkDestroySwapchainKHR(instance.pl_device.device, (*renderer).swapchain, VK_NULL_HANDLE);
+    vkDestroySurfaceKHR(instance.pl_instance.instance, (*window).surface, VK_NULL_HANDLE);
+
+    (*renderer).priv_activeFrame = 0;
+}
+static void PLCore_RecreateRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
+    PLCore_DestroyRenderObjects(instance, renderer, pipeline, window);
+    PLCore_CreateRenderObjects(instance, renderer, pipeline, window);
+}
+
+
 PLCore_Buffer PLCore_CreateBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage) {
     VkDeviceMemory memory;
     VkBuffer buffer = PLCore_Priv_CreateBuffer(instance.pl_device.device, instance.pl_device.memoryProperties, size, instance.pl_device.transferQueue.familyIndex, usage, CPU_VISIBLE, &memory);
@@ -1094,22 +1167,20 @@ PLCore_Buffer PLCore_CreateGPUBuffer(PLCore_RenderInstance instance, VkDeviceSiz
     return pl_buffer;
 }
 
-void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_Window window) {
-    VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer->swapchain, UINT64_MAX, renderer->priv_waitSemahores[renderer->priv_activeFrame], VK_NULL_HANDLE, &(*renderer).priv_imageIndex);
+void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
+    VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer->swapchain, UINT64_MAX, renderer->priv_waitSemaphores[renderer->priv_activeFrame], VK_NULL_HANDLE, &(*renderer).priv_imageIndex);
     if (imageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
-        // TODO: Rebuilding Swapchain
-        //DestroyRenderStateRenderer();
-        //CreateRenderStateRenderer();
-        fprintf(stderr, "Rendering Objects Need To Be Rebuilt\n");
-        assert(1);
-        return;
+        PLCore_RecreateRenderObjects(instance, renderer, pipeline, window);
+        //fprintf(stderr, "Rendering Objects Need To Be Rebuilt\n");
+        //assert(1);
+        //return;
     }
 
     vkWaitForFences(instance.pl_device.device, 1, &renderer->priv_renderFences[renderer->priv_activeFrame], VK_TRUE, UINT64_MAX);
     vkResetFences(instance.pl_device.device, 1, &renderer->priv_renderFences[renderer->priv_activeFrame]);
 
 
-    VkRect2D scissor = window.renderArea;
+    VkRect2D scissor = window->renderArea;
     VkClearValue clears[2];
     clears[0].color.float32[0] = 0.015f;
     clears[0].color.float32[1] = 0.015f;
@@ -1121,7 +1192,7 @@ void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer
 
     BeginFrameRecording(renderer->graphicsPool.buffers[renderer->priv_imageIndex], renderer->renderPass, renderer->framebuffers[renderer->priv_imageIndex], scissor, 2, clears);
 }
-void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer) {
+void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
     EndFrameRecording(renderer->graphicsPool.buffers[renderer->priv_imageIndex]);
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
@@ -1129,12 +1200,12 @@ void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer) 
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.pNext = VK_NULL_HANDLE;
     submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &renderer->priv_waitSemahores[renderer->priv_activeFrame];
+    submitInfo.pWaitSemaphores = &renderer->priv_waitSemaphores[renderer->priv_activeFrame];
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &renderer->graphicsPool.buffers[renderer->priv_imageIndex];
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &renderer->priv_signalSemahores[renderer->priv_activeFrame];
+    submitInfo.pSignalSemaphores = &renderer->priv_signalSemaphores[renderer->priv_activeFrame];
 
     vkQueueSubmit(instance.pl_device.graphicsQueue.queue, 1, &submitInfo, (*renderer).priv_renderFences[renderer->priv_activeFrame]);
 
@@ -1143,7 +1214,7 @@ void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer) 
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.pNext = VK_NULL_HANDLE;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderer->priv_signalSemahores[renderer->priv_activeFrame];
+    presentInfo.pWaitSemaphores = &renderer->priv_signalSemaphores[renderer->priv_activeFrame];
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &renderer->swapchain;
     presentInfo.pImageIndices = &renderer->priv_imageIndex;
@@ -1151,12 +1222,10 @@ void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer) 
 
     VkResult renderResult = vkQueuePresentKHR(instance.pl_device.graphicsQueue.queue, &presentInfo);
     if (renderResult == VK_ERROR_OUT_OF_DATE_KHR || renderResult == VK_SUBOPTIMAL_KHR) {
-        // TODO: Rebuilding Swapchain
-        //DestroyRenderStateRenderer();
-        //CreateRenderStateRenderer();
-        fprintf(stderr, "Rendering Objects Need To Be Rebuilt\n");
-        assert(1);
-        return;
+        PLCore_RecreateRenderObjects(instance, renderer, pipeline, window);
+        //fprintf(stderr, "Rendering Objects Need To Be Rebuilt\n");
+        //assert(1);
+        //return;
     }
 
     renderer->priv_activeFrame = (renderer->priv_activeFrame+1)%renderer->backBuffers;
@@ -1177,19 +1246,26 @@ PLCore_DynamicSizedBuffer   PLCore_CreateDynamicSizedBuffer() {
     };
     return buffer;
 }
-void                        PLCore_PushVerticesToDynamicSizedBuffer(PLCore_DynamicSizedBuffer* buffer, size_t elementSize, size_t elementCount, void* data) {
+void                        PLCore_PushVerticesToDynamicSizedBuffer(PLCore_DynamicSizedBuffer* buffer, size_t elementSize, size_t elementCount, PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE data) {
     if (buffer->data == VK_NULL_HANDLE)
         (*buffer).data = malloc(elementSize * buffer->dataSize);
-    if (buffer->dataCount >= buffer->dataSize)
+    if (buffer->dataCount+elementCount >= buffer->dataSize) {
         (*buffer).data = realloc((*buffer).data, elementSize * ((*buffer).dataSize *= 2));
+    }
 
-    memcpy((char*)((*buffer).data)+(buffer->dataCount), (char*)data, elementSize * elementCount);
+    size_t bufferOffset = buffer->dataCount;
+    memcpy_s((buffer->data)+bufferOffset, buffer->dataSize * elementSize, data, elementSize * elementCount);
+    (*buffer).dataCount += elementCount;
     (*buffer).dataChanged = 1;
 }
 PLCore_Buffer               PLCore_RequestDynamicSizedBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicSizedBuffer* buffer, VkBufferUsageFlagBits usage, size_t elementSize) {
     (*buffer).buffer = PLCore_CreateGPUBuffer(instance, elementSize * buffer->dataSize, usage, buffer->data);
+    (*buffer).dataChanged = 0;
     return buffer->buffer;
 }
-
+void                        PLCore_ClearDynamicSizedBufferData(PLCore_DynamicSizedBuffer* buffer) {
+    free((*buffer).data);
+    *buffer = PLCore_CreateDynamicSizedBuffer();
+}
 
 
