@@ -22,3 +22,7 @@ I may also forget something or mispell some things so keep that in mind
 ## Creating Vulkan Objects
 - [Creating Instances](https://github.com/Bryson-C/Plutonium/blob/main/Instance.md)
 - [Creating Devices And Queues](https://github.com/Bryson-C/Plutonium/blob/main/Devices.md)
+
+## TODO
+- Remove Files That Are Outdated Or Deprecated
+- Finish Writing About Using Vulkan In C
