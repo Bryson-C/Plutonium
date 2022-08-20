@@ -173,7 +173,7 @@ int main() {
 */
 
     // remove If You Want The Rendering Code
-    //return wrenMain("D:\\Plutonium\\wren.wren");
+    // return wrenMain("D:\\Plutonium\\wren.wren");
 
 
     PLCore_RenderInstance RenderInstance = PLCore_CreateRenderingInstance();
@@ -183,8 +183,7 @@ int main() {
 
     PLCore_ShaderModule vShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\v.spv", "main");
     PLCore_ShaderModule fShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\f.spv", "main");
-    s_GlobalVertexShader = vShader;
-    s_GlobalFragmentShader = fShader;
+
 
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
@@ -248,16 +247,18 @@ int main() {
             buttonCooldown = clock();
             double xMouse;
             glfwGetCursorPos(Window.window, &xMouse, VK_NULL_HANDLE);
-            srand((size_t)xMouse + clock());
+            srand((size_t)xMouse + clock() * time(NULL));
 
-            float xOffset = ((float)(rand() % 200)/200.0f)-0.5f, yOffset = ((float)(rand() % 200)/200.0f)-0.5f;
             float
-            colx = (float)sin(clock()%100),
-            coly = (float)sin(clock()%50),
-            colz = (float)sin(clock()%30);
+                xOffset = ((float)(rand() % 200)/200.0f)-0.5f,
+                yOffset = ((float)(rand() % 200)/200.0f)-0.5f;
+            float
+                colx = (float)sin(clock()%100),
+                coly = (float)sin(clock()%50),
+                colz = (float)sin(clock()%30);
 
             PLCore_vertex verts[] = {
-                    {{ 0.0f+xOffset, -0.5f+yOffset, 0.0f}, { colx, 1.0f,  1.0f }},
+                    {{ 0.0f+xOffset, -0.5f+yOffset, 0.0f }, { colx, 1.0f,  1.0f }},
                     {{ 0.5f+xOffset, 0.5f+yOffset, 0.0f }, { 0.0f, coly, 0.0f }},
                     {{ -0.5f+xOffset, 0.5f+yOffset, 0.0f }, { 0.0f, 0.0f, colz }},
             };
@@ -274,6 +275,7 @@ int main() {
         PLCore_BeginFrame(RenderInstance, &Renderer, &Pipeline, &Window);
 
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
+
 
         vkCmdBindPipeline(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.pipeline);
         VkDeviceSize offsets[] = {0};

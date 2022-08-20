@@ -17,7 +17,7 @@ static uint32_t findMemoryType(VkPhysicalDeviceMemoryProperties memoryProperties
 
 
 
-
+// TODO: Remove Validation Layers For Release Builds
 VkInstance PLCore_Priv_CreateInstance(VkDebugUtilsMessengerEXT* messenger) {
 
     // Initialize GLFW Library
@@ -733,8 +733,6 @@ PLCore_PipelineBuilder PLCore_Priv_CreateBlankPipelineBuilder() {
     builder.hasColorBlend = 0;
     builder.hasRasterizer = 0;
     builder.hasRenderPass = 0;
-    builder.hasViewportState = 0;
-    builder.hasViewport = 0;
     return builder;
 }
 
@@ -750,10 +748,6 @@ void PLCore_Priv_AddVertexInputToPipelineBuilder(PLCore_PipelineBuilder* builder
 void PLCore_Priv_AddInputAssemblyToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineInputAssemblyStateCreateInfo inputAssembly) {
     builder->hasInputAssembly = 1;
     builder->inputAssembly = inputAssembly;
-}
-void PLCore_Priv_AddViewportStateToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineViewportStateCreateInfo viewportState) {
-    builder->hasViewportState = 1;
-    builder->viewportState = viewportState;
 }
 void PLCore_Priv_AddPipelineLayoutToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineLayout pipelineLayout) {
     builder->hasPipelineLayout = 1;
@@ -794,26 +788,37 @@ VkPipeline PLCore_Priv_CreatePipelineFromBuilder(VkDevice device, PLCore_Pipelin
     if (builder->hasColorBlend == 0) { PLCore_Priv_AddColorBlendStateToPipelineBuilder(builder, PLCore_Priv_CreateColorBlend(1, PLCore_Priv_CreateColorBlendAttachment())); }
     if (builder->hasRasterizer == 0) { PLCore_Priv_AddRasterizerToPipelineBuilder(builder, PLCore_Priv_CreateRasterizer(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE, 1.0f)); }
 
-    // Cannot Go Without Viewport or Extent
-    if (builder->hasViewportState == 0) {
-        fprintf(stderr,"Invalid Or No Viewport Present In Pipeline Builder Therefore Will Not Continue");
-        assert(1);
-    }
+    // Creates A Template Viewport
+    VkPipelineViewportStateCreateInfo viewport = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            .pNext = VK_NULL_HANDLE,
+            .flags = 0,
+            .viewportCount = 1,
+            .pViewports = VK_NULL_HANDLE,
+            .scissorCount = 1,
+            .pScissors = VK_NULL_HANDLE,
+    };
 
     if (builder->hasRenderPass == 0) {
         fprintf(stderr,"Invalid Or No Render Pass Present In Pipeline Builder Therefore Will Not Continue");
         assert(1);
     }
 
-/*
+
+    VkDynamicState dynamicStates[] = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR,
+    };
+
+    // Asks For A Dynamic Viewport And RenderArea(Scissor)
     VkPipelineDynamicStateCreateInfo dynamicStateCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
             .pNext = VK_NULL_HANDLE,
             .flags = 0,
-            .dynamicStateCount = 0,
-            .pDynamicStates = VK_NULL_HANDLE,
+            .dynamicStateCount = 2,
+            .pDynamicStates = dynamicStates,
     };
-*/
+
 
     VkGraphicsPipelineCreateInfo pipelineInfo;
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -824,12 +829,12 @@ VkPipeline PLCore_Priv_CreatePipelineFromBuilder(VkDevice device, PLCore_Pipelin
     pipelineInfo.pVertexInputState = &builder->vertexInput;
     pipelineInfo.pInputAssemblyState = &builder->inputAssembly;
     pipelineInfo.pTessellationState = VK_NULL_HANDLE;
-    pipelineInfo.pViewportState = &builder->viewportState;
+    pipelineInfo.pViewportState = &viewport;
     pipelineInfo.pRasterizationState = &builder->rasterizer;
     pipelineInfo.pMultisampleState = &builder->multisample;
     pipelineInfo.pDepthStencilState = &builder->depthStencil;
     pipelineInfo.pColorBlendState = &builder->colorBlend;
-    pipelineInfo.pDynamicState = VK_NULL_HANDLE;
+    pipelineInfo.pDynamicState = &dynamicStateCreateInfo;
     pipelineInfo.layout = builder->pipelineLayout;
     pipelineInfo.renderPass = builder->renderPass;
     pipelineInfo.subpass = 0;
@@ -964,9 +969,6 @@ static void EndFrameRecording(VkCommandBuffer buffer) {
 }
 
 
-PLCore_ShaderModule s_GlobalVertexShader;
-PLCore_ShaderModule s_GlobalFragementShader;
-
 PLCore_RenderInstance PLCore_CreateRenderingInstance() {
     PLCore_RenderInstance renderInstance;
     renderInstance.pl_instance.instance = PLCore_Priv_CreateInstance(&renderInstance.pl_instance.priv_Messenger);
@@ -1009,6 +1011,26 @@ PLCore_Window PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t 
             .offset.y = 0,
     };
     return window;
+}
+static void PLCore_ResizeWindow(PLCore_RenderInstance instance, PLCore_Window* window) {
+    int width, height;
+    glfwGetWindowSize((*window).window, &width, &height);
+
+    glfwCreateWindowSurface(instance.pl_instance.instance, window->window, VK_NULL_HANDLE, &((*window).surface));
+    (*window).resolution = (VkExtent2D){.width = width, .height = height};
+    (*window).viewport = (VkViewport){
+            .width = (float)width,
+            .height = (float)height,
+            .x = 0,
+            .y = 0,
+            .maxDepth = 1.0f,
+            .minDepth = 0.0f,
+    };
+    (*window).renderArea = (VkRect2D){
+            .extent = window->resolution,
+            .offset.x = 0,
+            .offset.y = 0,
+    };
 }
 PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window) {
     PLCore_Renderer renderer;
@@ -1065,9 +1087,6 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
     PLCore_GraphicsPipeline pipeline;
     PLCore_PipelineBuilder builder = PLCore_Priv_CreateBlankPipelineBuilder();
 
-
-    VkPipelineViewportStateCreateInfo viewport = PLCore_Priv_CreateViewportState(window.viewport, window.renderArea);
-
     VkPipelineShaderStageCreateInfo shaders[] = {
             PLCore_Priv_CreateShaderStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT),
             PLCore_Priv_CreateShaderStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -1077,7 +1096,6 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
 
     PLCore_Priv_AddShadersToPipelineBuilder(&builder, 2, shaders);
     PLCore_Priv_AddRenderPassToPipelineBuilder(&builder, renderer.renderPass);
-    PLCore_Priv_AddViewportStateToPipelineBuilder(&builder, viewport);
     PLCore_Priv_AddVertexInputToPipelineBuilder(&builder, vertexInput);
     PLCore_Priv_AddPipelineLayoutToPipelineBuilder(&builder, pipeline.layout);
 
@@ -1087,37 +1105,9 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
     return pipeline;
 }
 
-// TODO: When Window Resizes The Application Crashes
-PLCore_GraphicsPipeline PLCore_CreatePipelineFromBuilder(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, PLCore_PipelineBuilder builder) {
-    PLCore_GraphicsPipeline pipeline;
-
-    VkPipelineViewportStateCreateInfo viewport = PLCore_Priv_CreateViewportState(window.viewport, window.renderArea);
-    PLCore_Priv_AddViewportStateToPipelineBuilder(&builder, viewport);
-    VkPipelineShaderStageCreateInfo shaders[] = {
-            PLCore_Priv_CreateShaderStage(s_GlobalVertexShader, VK_SHADER_STAGE_VERTEX_BIT),
-            PLCore_Priv_CreateShaderStage(s_GlobalFragementShader, VK_SHADER_STAGE_FRAGMENT_BIT),
-    };
-    PLCore_Priv_AddShadersToPipelineBuilder(&builder, 2, shaders);
-
-    pipeline.pl_builder = builder;
-    pipeline.pipeline = PLCore_Priv_CreatePipelineFromBuilder(instance.pl_device.device, &builder, &pipeline.layout);
-    return pipeline;
-}
 
 
-static void PLCore_CreateRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
-
-    if (window->resolution.width <= 0 || window->resolution.height <= 0 ) glfwWaitEvents();
-
-    glfwCreateWindowSurface(instance.pl_instance.instance, window->window, VK_NULL_HANDLE, &((*window).surface));
-    int32_t windowResX, windowResY;
-    glfwGetWindowSize(window->window, &windowResX, &windowResY);
-    (*window).resolution = (VkExtent2D){.width = windowResX, .height = windowResY};
-
-    *renderer = PLCore_CreateRenderer(instance, *window);
-    *pipeline = PLCore_CreatePipelineFromBuilder(instance, *renderer, *window, pipeline->pl_builder);
-}
-static void PLCore_DestroyRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
+static void PLCore_DestroyRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_Window* window) {
     vkDeviceWaitIdle(instance.pl_device.device);
 
     for (uint32_t i = 0; i < renderer->backBuffers; i++) {
@@ -1126,8 +1116,6 @@ static void PLCore_DestroyRenderObjects(PLCore_RenderInstance instance, PLCore_R
         vkDestroySemaphore(instance.pl_device.device, (*renderer).priv_signalSemaphores[i], VK_NULL_HANDLE);
     }
 
-    vkDestroyPipeline(instance.pl_device.device, (*pipeline).pipeline, VK_NULL_HANDLE);
-    vkDestroyPipelineLayout(instance.pl_device.device, (*pipeline).layout, VK_NULL_HANDLE);
     for (uint32_t i = 0; i < renderer->swapchainImageCount; i++) {
         //vkDestroyImage(instance.pl_device.device, (*renderer).swapchainImages[i], VK_NULL_HANDLE);
         //vkDestroyImageView(instance.pl_device.device, (*renderer).swapchainImageViews[i], VK_NULL_HANDLE);
@@ -1140,9 +1128,17 @@ static void PLCore_DestroyRenderObjects(PLCore_RenderInstance instance, PLCore_R
 
     (*renderer).priv_activeFrame = 0;
 }
+static void PLCore_CreateRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_Window* window) {
+
+    if (window->resolution.width <= 0 || window->resolution.height <= 0 ) glfwWaitEvents();
+
+    PLCore_ResizeWindow(instance, window);
+
+    *renderer = PLCore_CreateRenderer(instance, *window);
+}
 static void PLCore_RecreateRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
-    PLCore_DestroyRenderObjects(instance, renderer, pipeline, window);
-    PLCore_CreateRenderObjects(instance, renderer, pipeline, window);
+    PLCore_DestroyRenderObjects(instance, renderer, window);
+    PLCore_CreateRenderObjects(instance, renderer, window);
 }
 
 
@@ -1191,6 +1187,8 @@ void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer
 
 
     BeginFrameRecording(renderer->graphicsPool.buffers[renderer->priv_imageIndex], renderer->renderPass, renderer->framebuffers[renderer->priv_imageIndex], scissor, 2, clears);
+    vkCmdSetViewport(renderer->graphicsPool.buffers[renderer->priv_imageIndex], 0, 1, &window->viewport);
+    vkCmdSetScissor(renderer->graphicsPool.buffers[renderer->priv_imageIndex], 0, 1, &window->renderArea);
 }
 void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
     EndFrameRecording(renderer->graphicsPool.buffers[renderer->priv_imageIndex]);

@@ -114,12 +114,6 @@ typedef struct {
     int32_t hasInputAssembly;
     VkPipelineInputAssemblyStateCreateInfo inputAssembly;
 
-    int32_t hasViewport;
-    VkViewport viewport; // only needed if an invalid viewport state exists
-
-    int32_t hasViewportState;
-    VkPipelineViewportStateCreateInfo viewportState;
-
     int32_t hasRasterizer;
     VkPipelineRasterizationStateCreateInfo rasterizer;
 
@@ -184,7 +178,6 @@ PLCore_PipelineBuilder PLCore_Priv_CreateBlankPipelineBuilder();
 void PLCore_Priv_AddShadersToPipelineBuilder(PLCore_PipelineBuilder* builder, uint32_t shaderCount, VkPipelineShaderStageCreateInfo* shaders);
 void PLCore_Priv_AddVertexInputToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineVertexInputStateCreateInfo vertexInput);
 void PLCore_Priv_AddInputAssemblyToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineInputAssemblyStateCreateInfo inputAssembly);
-void PLCore_Priv_AddViewportStateToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineViewportStateCreateInfo viewportState);
 void PLCore_Priv_AddPipelineLayoutToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineLayout pipelineLayout);
 void PLCore_Priv_AddRasterizerToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineRasterizationStateCreateInfo rasterizer);
 void PLCore_Priv_AddMultisampleStateToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineMultisampleStateCreateInfo multisample);
