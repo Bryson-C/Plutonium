@@ -5,6 +5,8 @@
 #include <time.h>
 #include <math.h>
 
+#include <windows.h>
+
 /*
 //#include "Abstraction/Abstractions.h"
 #include "RenderState/RenderState.h"
@@ -173,8 +175,13 @@ int main() {
 */
 
     // remove If You Want The Rendering Code
-    // return wrenMain("D:\\Plutonium\\wren.wren");
 
+#ifdef WIN32
+
+    int ScriptThreadSafelyClosed = 0;
+    HANDLE ScriptThread = CreateThread(NULL, 0, OpenWrenInstance, "D:\\Plutonium\\wren.wren", 0 , NULL);
+
+#endif
 
     PLCore_RenderInstance RenderInstance = PLCore_CreateRenderingInstance();
     PLCore_Window Window = PLCore_CreateWindow(RenderInstance.pl_instance.instance, 800, 600);
@@ -269,6 +276,14 @@ int main() {
         if (dynVertexBuffer.dataChanged == 1) {
             vertexBuffer = PLCore_RequestDynamicSizedBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_vertex));
         }
+        if (glfwGetKey(Window.window, GLFW_KEY_F1) == GLFW_PRESS) {
+#ifdef WIN32
+            CloseWrenInstance();
+            TerminateThread(ScriptThread, 0);
+            CloseHandle(ScriptThread);
+            ScriptThreadSafelyClosed = 1;
+#endif
+        }
 
         glfwPollEvents();
 
@@ -289,12 +304,20 @@ int main() {
 
         fps++;
         if (clock()-timer > 1000) {
-            printf("Drawing %zi Vertices\n", dynVertexBuffer.dataCount);
+            printf("Drawing %zi Vertices  |  ", dynVertexBuffer.dataCount);
             timer = clock();
             printf("FPS: %u\n", fps);
             fps = 0;
         }
     }
+#ifdef WIN32
+    if (!ScriptThreadSafelyClosed) {
+        TerminateThread(ScriptThread, 0);
+        CloseHandle(ScriptThread);
+        ScriptThreadSafelyClosed = 1;
+    }
+#endif
+    glfwTerminate();
 
 
     return 0;
