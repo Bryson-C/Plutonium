@@ -8,12 +8,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <windows.h>
+
+
 #include "wren.h"
 
 
 
 inline void writeFn(WrenVM* vm, const char* text) {
-    printf("%s\n", text);
+    printf("\t%s", text);
 }
 
 // Stolen Code:
@@ -75,11 +78,7 @@ WrenForeignMethodFn bindForeignMethodFn(WrenVM* vm, const char* module, const ch
     }
 }
 
-
-
-int wrenMain(const char* path) {
-
-    // Load The File As A String
+const char* getFileContent(const char* path, size_t* size) {
     FILE* file;
     fopen_s(&file, path, "rb");
     fseek(file, 0, SEEK_END);
@@ -88,6 +87,22 @@ int wrenMain(const char* path) {
     char* buffer = malloc(sizeof(char) * fileSize + 1);
     fread_s(buffer, fileSize, sizeof(char), fileSize, file);
     buffer[fileSize] = '\0';
+    fclose(file);
+    if (size != NULL)
+        *size = fileSize;
+    return buffer;
+}
+
+static int RedoWrenLoop;
+void CloseWrenInstance() {
+    RedoWrenLoop = 0;
+}
+
+int OpenWrenInstance(const char* path) {
+    RedoWrenLoop = 1;
+
+    // Load The File As A String
+    const char* buffer = getFileContent(path, NULL);
 
 
     // Setup Wren
@@ -114,16 +129,25 @@ int wrenMain(const char* path) {
 
     // Check For Errors
     switch (result) {
-        case WREN_RESULT_COMPILE_ERROR:
-        { printf("Compile Error!\n"); } break;
-        case WREN_RESULT_RUNTIME_ERROR:
-        { printf("Runtime Error!\n"); } break;
-        case WREN_RESULT_SUCCESS:
-        { printf("Success!\n"); } break;
+        case WREN_RESULT_COMPILE_ERROR: { printf("Compile Error!\n"); } break;
+        case WREN_RESULT_RUNTIME_ERROR: { printf("Runtime Error!\n"); } break;
+        case WREN_RESULT_SUCCESS:       {} break;
     }
 
     // Free The Wren Instance
     wrenFreeVM(vm);
+
+    clock_t startTime = clock();
+    while (RedoWrenLoop) {
+        if (clock() - startTime > 200) {
+            startTime = clock();
+            const char* newBuffer = getFileContent(path, NULL);
+            if (strcmp(buffer, newBuffer) != 0) {
+                free(buffer);
+                OpenWrenInstance(path);
+            }
+        }
+    }
 
     return 0;
 }
