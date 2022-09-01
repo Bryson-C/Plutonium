@@ -210,26 +210,25 @@ void                        PLCore_UploadDataToBuffer(VkDevice device, VkDeviceM
 typedef struct {
     float xyz[3];
     float rgb[3];
-} PLCore_vertex;
+} PLCore_Vertex;
 
-// TODO: Maybe Dont Use A Macro, But Users Shouldn't Bitch If It Works
-#ifndef PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE
-    #define PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE PLCore_vertex*
-#endif
 
 typedef struct {
     PLCore_Buffer buffer;
-    PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE data;
+    PLCore_Vertex* data;
     size_t dataCount;
     size_t dataSize;
     int dataChanged;
-} PLCore_DynamicSizedBuffer;
+} PLCore_DynamicVertexBuffer;
 
 
-PLCore_DynamicSizedBuffer   PLCore_CreateDynamicSizedBuffer();
-void                        PLCore_PushVerticesToDynamicSizedBuffer(PLCore_DynamicSizedBuffer* buffer, size_t elementSize, size_t elementCount, PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE data);
-PLCore_Buffer               PLCore_RequestDynamicSizedBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicSizedBuffer* buffer, VkBufferUsageFlagBits usage, size_t elementSize);
-void                        PLCore_ClearDynamicSizedBufferData(PLCore_DynamicSizedBuffer* buffer);
+PLCore_DynamicVertexBuffer  PLCore_CreateDynamicVertexBuffer();
+PLCore_Vertex*              PLCore_PushVerticesToDynamicVertexBuffer(PLCore_DynamicVertexBuffer* buffer, size_t elementSize, size_t elementCount, PLCore_Vertex* data);
+PLCore_Buffer               PLCore_RequestDynamicVertexBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicVertexBuffer* buffer, VkBufferUsageFlagBits usage, size_t elementSize);
+void                        PLCore_ClearDynamicVertexBufferData(PLCore_DynamicVertexBuffer* buffer);
+void                        PLCore_MoveDynamicBufferVertices(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset);
+void                        PLCore_MoveDynamicBufferVerticesTo(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset);
+
 
 
 

@@ -1234,8 +1234,8 @@ VkCommandBuffer PLCore_ActiveRenderBuffer(PLCore_Renderer renderer) {
 }
 
 
-PLCore_DynamicSizedBuffer   PLCore_CreateDynamicSizedBuffer() {
-    PLCore_DynamicSizedBuffer buffer = {
+PLCore_DynamicVertexBuffer   PLCore_CreateDynamicVertexBuffer() {
+    PLCore_DynamicVertexBuffer buffer = {
             .buffer = {VK_NULL_HANDLE, VK_NULL_HANDLE},
             .data = VK_NULL_HANDLE,
             .dataCount = 0,
@@ -1244,7 +1244,7 @@ PLCore_DynamicSizedBuffer   PLCore_CreateDynamicSizedBuffer() {
     };
     return buffer;
 }
-void                        PLCore_PushVerticesToDynamicSizedBuffer(PLCore_DynamicSizedBuffer* buffer, size_t elementSize, size_t elementCount, PLCORE_PRIVMC_DYNAMICSIZEDBUFFER_DEFAULT_TYPE data) {
+PLCore_Vertex*                       PLCore_PushVerticesToDynamicVertexBuffer(PLCore_DynamicVertexBuffer* buffer, size_t elementSize, size_t elementCount, PLCore_Vertex* data) {
     if (buffer->data == VK_NULL_HANDLE)
         (*buffer).data = malloc(elementSize * buffer->dataSize);
     if (buffer->dataCount+elementCount >= buffer->dataSize) {
@@ -1253,17 +1253,34 @@ void                        PLCore_PushVerticesToDynamicSizedBuffer(PLCore_Dynam
 
     size_t bufferOffset = buffer->dataCount;
     memcpy_s((buffer->data)+bufferOffset, buffer->dataSize * elementSize, data, elementSize * elementCount);
+    PLCore_Vertex* vertices = buffer->data+buffer->dataCount;
     (*buffer).dataCount += elementCount;
     (*buffer).dataChanged = 1;
+    return vertices;
 }
-PLCore_Buffer               PLCore_RequestDynamicSizedBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicSizedBuffer* buffer, VkBufferUsageFlagBits usage, size_t elementSize) {
+PLCore_Buffer               PLCore_RequestDynamicVertexBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicVertexBuffer * buffer, VkBufferUsageFlagBits usage, size_t elementSize) {
     (*buffer).buffer = PLCore_CreateGPUBuffer(instance, elementSize * buffer->dataSize, usage, buffer->data);
     (*buffer).dataChanged = 0;
     return buffer->buffer;
 }
-void                        PLCore_ClearDynamicSizedBufferData(PLCore_DynamicSizedBuffer* buffer) {
+void                        PLCore_ClearDynamicVertexBufferData(PLCore_DynamicVertexBuffer* buffer) {
     free((*buffer).data);
-    *buffer = PLCore_CreateDynamicSizedBuffer();
+    *buffer = PLCore_CreateDynamicVertexBuffer();
 }
-
+void                        PLCore_MoveDynamicBufferVertices(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset) {
+    if (vertices == VK_NULL_HANDLE) return;
+    (*buffer).dataChanged = 1;
+    for (size_t i = 0; i < vertexCount; i++) {
+        (*(vertices+i)).xyz[0] += xOffset;
+        (*(vertices+i)).xyz[1] += yOffset;
+    }
+}
+void                        PLCore_MoveDynamicBufferVerticesTo(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset) {
+    if (vertices == VK_NULL_HANDLE) return;
+    (*buffer).dataChanged = 1;
+    for (size_t i = 0; i < vertexCount; i++) {
+        (*(vertices+i)).xyz[0] = xOffset;
+        (*(vertices+i)).xyz[1] = yOffset;
+    }
+}
 
