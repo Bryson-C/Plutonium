@@ -159,7 +159,7 @@ VkFramebuffer           PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2
 PLCore_RenderInstance   PLCore_CreateRenderingInstance();
 PLCore_Window           PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t height);
 PLCore_Renderer         PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window);
-PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader);
+PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader, VkPipelineLayout* layout);
 
 PLCore_ShaderModule s_GlobalVertexShader;
 PLCore_ShaderModule s_GlobalFragmentShader;
@@ -221,8 +221,8 @@ typedef struct {
     int dataChanged;
 } PLCore_DynamicVertexBuffer;
 
-
 PLCore_DynamicVertexBuffer  PLCore_CreateDynamicVertexBuffer();
+// TODO: Vertex Becomes Invalid After Vertex Buffer Is Cleared So Maybe Cope With That
 PLCore_Vertex*              PLCore_PushVerticesToDynamicVertexBuffer(PLCore_DynamicVertexBuffer* buffer, size_t elementSize, size_t elementCount, PLCore_Vertex* data);
 PLCore_Buffer               PLCore_RequestDynamicVertexBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicVertexBuffer* buffer, VkBufferUsageFlagBits usage, size_t elementSize);
 void                        PLCore_ClearDynamicVertexBufferData(PLCore_DynamicVertexBuffer* buffer);
@@ -230,8 +230,12 @@ void                        PLCore_MoveDynamicBufferVertices(PLCore_DynamicVerte
 void                        PLCore_MoveDynamicBufferVerticesTo(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset);
 
 
-
-
+VkDescriptorSetLayoutBinding PLCore_Priv_CreateDescriptorLayoutBinding(uint32_t slot, VkDescriptorType type, uint32_t descriptorCount, VkShaderStageFlagBits stages);
+VkDescriptorSetLayout PLCore_Priv_CreateDescriptorLayout(VkDevice device, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings);
+VkDescriptorPoolSize PLCore_Priv_CreateDescritorPoolSize(VkDescriptorType type, uint32_t descriptorCount);
+VkDescriptorPool PLCore_Priv_CreateDescriptorPool(VkDevice device, uint32_t sets, VkDescriptorType type, uint32_t poolSizeCount, VkDescriptorPoolSize* sizes);
+VkDescriptorSet* PLCore_Priv_CreateDescriptorSets(VkDevice device, uint32_t count, VkDescriptorType type, VkDescriptorSetLayout layout, VkDescriptorPool pool);
+void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
 
 
 #endif //PLUTONIUM_PLUTONIUMCORE_H

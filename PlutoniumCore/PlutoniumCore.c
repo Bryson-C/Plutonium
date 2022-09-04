@@ -1083,7 +1083,7 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
 
     return renderer;
 }
-PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader) {
+PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader, VkPipelineLayout* layout) {
     PLCore_GraphicsPipeline pipeline;
     PLCore_PipelineBuilder builder = PLCore_Priv_CreateBlankPipelineBuilder();
 
@@ -1092,7 +1092,10 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
             PLCore_Priv_CreateShaderStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT),
     };
 
-    pipeline.layout = PLCore_Priv_CreatePipelineLayout(instance.pl_device.device, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE);
+    if (layout == VK_NULL_HANDLE)
+        pipeline.layout = PLCore_Priv_CreatePipelineLayout(instance.pl_device.device, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE);
+    else
+        pipeline.layout = *layout;
 
     PLCore_Priv_AddShadersToPipelineBuilder(&builder, 2, shaders);
     PLCore_Priv_AddRenderPassToPipelineBuilder(&builder, renderer.renderPass);
@@ -1234,7 +1237,7 @@ VkCommandBuffer PLCore_ActiveRenderBuffer(PLCore_Renderer renderer) {
 }
 
 
-PLCore_DynamicVertexBuffer   PLCore_CreateDynamicVertexBuffer() {
+PLCore_DynamicVertexBuffer  PLCore_CreateDynamicVertexBuffer() {
     PLCore_DynamicVertexBuffer buffer = {
             .buffer = {VK_NULL_HANDLE, VK_NULL_HANDLE},
             .data = VK_NULL_HANDLE,
@@ -1244,7 +1247,7 @@ PLCore_DynamicVertexBuffer   PLCore_CreateDynamicVertexBuffer() {
     };
     return buffer;
 }
-PLCore_Vertex*                       PLCore_PushVerticesToDynamicVertexBuffer(PLCore_DynamicVertexBuffer* buffer, size_t elementSize, size_t elementCount, PLCore_Vertex* data) {
+PLCore_Vertex*              PLCore_PushVerticesToDynamicVertexBuffer(PLCore_DynamicVertexBuffer* buffer, size_t elementSize, size_t elementCount, PLCore_Vertex* data) {
     if (buffer->data == VK_NULL_HANDLE)
         (*buffer).data = malloc(elementSize * buffer->dataSize);
     if (buffer->dataCount+elementCount >= buffer->dataSize) {
@@ -1283,4 +1286,100 @@ void                        PLCore_MoveDynamicBufferVerticesTo(PLCore_DynamicVer
         (*(vertices+i)).xyz[1] = yOffset;
     }
 }
+
+
+
+
+VkDescriptorSetLayoutBinding
+PLCore_Priv_CreateDescriptorLayoutBinding
+(uint32_t slot, VkDescriptorType type, uint32_t descriptorCount, VkShaderStageFlagBits stages) {
+
+    VkDescriptorSetLayoutBinding binding;
+    binding.binding = slot;
+    binding.descriptorType = type;
+    binding.descriptorCount = descriptorCount;
+    binding.stageFlags = stages;
+    binding.pImmutableSamplers = VK_NULL_HANDLE;
+    return binding;
+}
+
+// TODO: Documentation Of Descriptor Code
+
+VkDescriptorSetLayout
+PLCore_Priv_CreateDescriptorLayout
+(VkDevice device, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings) {
+    VkDescriptorSetLayout layout;
+    VkDescriptorSetLayoutCreateInfo layoutInfo;
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.pNext = VK_NULL_HANDLE;
+    layoutInfo.flags = 0;
+    layoutInfo.bindingCount = bindingCount;
+    layoutInfo.pBindings = bindings;
+
+    vkCreateDescriptorSetLayout(device, &layoutInfo, VK_NULL_HANDLE, &layout);
+    return layout;
+}
+VkDescriptorPoolSize
+PLCore_Priv_CreateDescritorPoolSize
+(VkDescriptorType type, uint32_t descriptorCount) {
+    return (VkDescriptorPoolSize) {
+        .type = type,
+        .descriptorCount = descriptorCount,
+    };
+}
+VkDescriptorPool
+PLCore_Priv_CreateDescriptorPool
+(VkDevice device, uint32_t sets, VkDescriptorType type, uint32_t poolSizeCount, VkDescriptorPoolSize* sizes) {
+    VkDescriptorPool pool;
+
+    VkDescriptorPoolCreateInfo poolInfo;
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.pNext = VK_NULL_HANDLE;
+    poolInfo.flags = 0;
+    poolInfo.poolSizeCount = poolSizeCount;
+    poolInfo.pPoolSizes = sizes;
+    poolInfo.maxSets = sets;
+
+    vkCreateDescriptorPool(device, &poolInfo, VK_NULL_HANDLE, &pool);
+    return pool;
+}
+
+VkDescriptorSet*
+PLCore_Priv_CreateDescriptorSets
+(VkDevice device, uint32_t count, VkDescriptorType type, VkDescriptorSetLayout layout, VkDescriptorPool pool) {
+    VkDescriptorSet* sets = malloc(sizeof(VkDescriptorSet) * count);
+
+    VkDescriptorSetLayout* descriptorLayouts = malloc(sizeof(VkDescriptorSetLayout) * count);
+    for (uint32_t i = 0; i < count; i++) descriptorLayouts[i] = layout;
+
+    VkDescriptorSetAllocateInfo allocInfo;
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.pNext = VK_NULL_HANDLE;
+    allocInfo.pSetLayouts = descriptorLayouts;
+    allocInfo.descriptorSetCount = count;
+    allocInfo.descriptorPool = pool;
+
+    vkAllocateDescriptorSets(device, &allocInfo, sets);
+
+    free(descriptorLayouts);
+
+    return sets;
+}
+
+void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
+    VkWriteDescriptorSet write;
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.pNext = VK_NULL_HANDLE;
+    write.dstSet = set;
+    write.dstBinding = dstBinding;
+    write.dstArrayElement = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = type;
+    write.pImageInfo = imageInfo;
+    write.pBufferInfo = bufferInfo;
+    write.pTexelBufferView = VK_NULL_HANDLE;
+
+    vkUpdateDescriptorSets(device, 1, &write, 0, VK_NULL_HANDLE);
+}
+
 

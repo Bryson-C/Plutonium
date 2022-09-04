@@ -153,4 +153,22 @@ int OpenWrenInstance(const char* path) {
 }
 
 
+HANDLE NewWrenScriptThread(const char* path) {
+#ifdef WIN32
+    HANDLE ScriptThread = CreateThread(NULL, 0, OpenWrenInstance, path, 0 , NULL);
+    return ScriptThread;
+#endif
+}
+BOOL CloseWrenScriptThread(HANDLE thread) {
+#ifdef WIN32
+    CloseWrenInstance();
+    BOOL exitThreadResult = TerminateThread(thread, 0);
+    const char* error = GetLastError();
+    printf("%s\n", (error != NULL) ? error : "Exited Safely!");
+    return exitThreadResult;
+#endif
+    return TRUE;
+}
+
+
 #endif //PLUTONIUM_WRENSCRIPT_H

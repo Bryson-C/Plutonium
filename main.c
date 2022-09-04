@@ -84,104 +84,18 @@ Buffer RequestBufferFromGlobalIndices()
 
 #include "Abstraction/PlutoniumCore/WrenScript.h"
 
+typedef struct {
+    float x;
+    float y;
+} UNIFORM;
 
 
 int main() {
-/*
-    const Float3 softBlue = {0.1f,0.3f,1.0f};
-    const Float3 softRed = {1.0f,0.3f,0.1f};
-    const Float3 softGreen = {0.1f,1.0f,0.3f};
-    const Float3 white = {0.9f,0.9f,0.9f};
-
-    CreateNewQuadViaVertices(-1.0f, -1.0f, 1.0f, 1.0f, white, -1);
-    CreateNewQuadViaVertices(0.0f, 0.0f, 1.0f, 1.0f, white, -1);
-
-
-    ApplyShader(VK_SHADER_STAGE_VERTEX_BIT, "D:\\Plutonium\\vertex.spv", "main");
-    ApplyShader(VK_SHADER_STAGE_FRAGMENT_BIT, "D:\\Plutonium\\fragment.spv", "main");
-
-    U32 bindingCount = 1;
-    VkVertexInputBindingDescription bindings[] = {
-            createVertexBinding(0, VK_VERTEX_INPUT_RATE_VERTEX, sizeof(vertex))
-    };
-
-    U32 attributeCount = 3;
-    VkVertexInputAttributeDescription attributes[] = {
-            createVertexAttribute(0, 0, (VkFormat)shaderVec3, offsetof(vertex,pos)),
-            createVertexAttribute(0, 1, (VkFormat)shaderVec3, offsetof(vertex,col)),
-            createVertexAttribute(0, 2, (VkFormat)shaderVec2, offsetof(vertex,uv)),
-            createVertexAttribute(0, 3, (VkFormat)shaderFloat, offsetof(vertex,textureId)),
-    };
-    ApplyVertexInput(attributeCount, attributes, bindingCount, bindings);
-
-    CreateRenderState();
-
-
-    Buffer VertexBuffer = RequestBufferFromGlobalVertices();
-    Buffer IndexBuffer = RequestBufferFromGlobalIndices();
-
-    UniformBuffer UniformBuffers[2] = {
-        RequestUniform(sizeof(UBO), VK_SHADER_STAGE_FRAGMENT_BIT, 0),
-        RequestUniform(sizeof(UBO), VK_SHADER_STAGE_FRAGMENT_BIT, 0),
-    };
-
-    Texture* texture = RequestTexture("D:\\Plutonium\\texture.jpg", 0);
-    //Texture* texture2 = RequestTexture("D:\\Plutonium\\circ.png", 1);
-    //Texture* texture3 = RequestTexture("D:\\Plutonium\\texture.jpg", 2);
-
-    VkDescriptorSetLayout layouts[] = {UniformBuffers[0].descriptor.layout, VRS.texturePool.layout[0], VRS.texturePool.samplerLayout};
-    ApplyDescriptorLayouts(3, layouts);
-
-    CreateRenderStateRenderer();
-
-    clock_t timer = clock();
-
-    while (!glfwWindowShouldClose(VRS.window)) {
-        glfwPollEvents();
-        BeginDraw();
-
-
-        float color = sin((double)clock()/1000)/1.0f + 0.5f;
-        UBO ubo = {.xyz = softGreen};
-
-        UpdateUniform(VRS.device, &UniformBuffers[VRS.activeFrame], sizeof(UBO), &ubo);
-
-        CommandBuffer currentBuffer = VRS.renderBuffers[VRS.imageIndex];
-        VkDeviceSize offsets[] = {0};
-
-        VkDescriptorSet sets[] = {UniformBuffers[VRS.activeFrame].descriptor.set, VRS.texturePool.samplerSet, texture->set};
-
-        BindDescriptorSets(currentBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VRS.pipelineLayout, 3, sets);
-
-        vkCmdBindVertexBuffers(currentBuffer, 0, 1, &VertexBuffer.buffer, offsets);
-        vkCmdBindIndexBuffer(currentBuffer, IndexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-        size_t indexCount;
-        AcquireIndices(&indexCount);
-        vkCmdDrawIndexed(currentBuffer, indexCount, 1, 0, 0, 0);
-
-        SubmitDraw();
-        glfwSwapBuffers(VRS.window);
-
-        if (vkGetFenceStatus(VRS.device, VRS.renderFences[VRS.activeFrame]) == VK_NOT_READY) {
-            if (s_GlobalVerticesChanged) VertexBuffer = RequestBufferFromGlobalVertices();
-            if (s_GlobalIndicesChanged) IndexBuffer = RequestBufferFromGlobalIndices();
-        }
-
-    }
-
-
-    DestroyRenderState();
-*/
 
     // remove If You Want The Rendering Code
 
-#ifdef WIN32
-
-    int ScriptThreadSafelyClosed = 0;
-    HANDLE ScriptThread = CreateThread(NULL, 0, OpenWrenInstance, "D:\\Plutonium\\wren.wren", 0 , NULL);
-
-#endif
+    int ScriptThreadSafelyClosed;
+    HANDLE ScriptHandle = NewWrenScriptThread("D:\\Plutonium\\wren.wren");
 
     PLCore_RenderInstance RenderInstance = PLCore_CreateRenderingInstance();
     PLCore_Window Window = PLCore_CreateWindow(RenderInstance.pl_instance.instance, 800, 600);
@@ -194,103 +108,140 @@ int main() {
 
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
-    PLCore_vertex vertices[] = {
-        {{ 0.0f, -0.5f, 0.0f}, {1.0f, 1.0f,  1.0f}},
-        {{ 0.5f, 0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }},
-        {{ -0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }},
+    PLCore_Vertex vertices[] = {
+            {{ 0.0f, -0.5f, 0.0f}, {1.0f, 1.0f,  1.0f}},
+            {{ 0.5f, 0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }},
+            {{ -0.5f, 0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }},
 
-        {{0.0f-1.0f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f }},
-        {{ 0.5f-1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
-        {{ -0.5f-1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
+            {{0.0f-1.0f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f }},
+            {{ 0.5f-1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
+            {{ -0.5f-1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
     };
 
-    PLCore_vertex verts2[] = {
+    PLCore_Vertex verts2[] = {
             {{ 0.0f+1.0f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f }},
             {{ 0.5f+1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
             {{ -0.5f+1.0f, 0.5f, 1.0f }, { 1.0f, 0.0f, 0.0f }},
     };
 
-    PLCore_DynamicSizedBuffer dynVertexBuffer = PLCore_CreateDynamicSizedBuffer();
-    PLCore_PushVerticesToDynamicSizedBuffer(&dynVertexBuffer, sizeof(PLCore_vertex), 6, vertices);
-    PLCore_PushVerticesToDynamicSizedBuffer(&dynVertexBuffer, sizeof(PLCore_vertex), 3, verts2);
-    PLCore_Buffer vertexBuffer = PLCore_RequestDynamicSizedBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_vertex));
+    PLCore_DynamicVertexBuffer dynVertexBuffer = PLCore_CreateDynamicVertexBuffer();
+    PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 6, vertices);
+    PLCore_Vertex* vert = PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 3, verts2);
+    PLCore_Buffer vertexBuffer = PLCore_RequestDynamicVertexBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_Vertex));
 
 
+
+    PLCore_Buffer uniformBuffers[2] = {
+            PLCore_CreateBuffer(RenderInstance, sizeof(UNIFORM), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
+            PLCore_CreateBuffer(RenderInstance, sizeof(UNIFORM), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
+    };
+    VkDescriptorSetLayoutBinding binding = PLCore_Priv_CreateDescriptorLayoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT);
+    VkDescriptorSetLayout layout = PLCore_Priv_CreateDescriptorLayout(RenderInstance.pl_device.device, 1, &binding);
+    VkDescriptorPoolSize size = PLCore_Priv_CreateDescritorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Renderer.backBuffers);
+    VkDescriptorPool pool = PLCore_Priv_CreateDescriptorPool(RenderInstance.pl_device.device, 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &size);
+    VkDescriptorSet* uniformSets = PLCore_Priv_CreateDescriptorSets(RenderInstance.pl_device.device, 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, layout, pool);
+
+    VkDescriptorBufferInfo bufferinfo[2] = {
+            {
+                .buffer = uniformBuffers[0].buffer,
+                .offset = 0,
+                .range = sizeof(UNIFORM),
+            },{
+                .buffer = uniformBuffers[1].buffer,
+                .offset = 0,
+                .range = sizeof(UNIFORM),
+            },
+    };
+    PLCore_Priv_WriteDescriptor(RenderInstance.pl_device.device, uniformSets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &bufferinfo[0], VK_NULL_HANDLE);
+    PLCore_Priv_WriteDescriptor(RenderInstance.pl_device.device, uniformSets[1], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &bufferinfo[1], VK_NULL_HANDLE);
 
 
     VkVertexInputAttributeDescription attribs[] = {
             {
                 .binding = 0,
                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                .offset = offsetof(PLCore_vertex, xyz),
+                .offset = offsetof(PLCore_Vertex, xyz),
                 .location = 0,
             },
             {
                 .binding = 0,
                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                .offset = offsetof(PLCore_vertex, rgb),
+                .offset = offsetof(PLCore_Vertex, rgb),
                 .location = 1,
             }
     };
     VkVertexInputBindingDescription bindings[] = {
             {
                 .binding = 0,
-                .stride = sizeof(PLCore_vertex),
+                .stride = sizeof(PLCore_Vertex),
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
             }
     };
     VkPipelineVertexInputStateCreateInfo vertexInput = PLCore_Priv_CreateVertexInput(2, attribs, 1, bindings);
 
-    PLCore_GraphicsPipeline Pipeline = PLCore_CreatePipeline(RenderInstance, Renderer, Window, vertexInput, vShader, fShader);
+    VkPipelineLayout pipelineLayout = PLCore_Priv_CreatePipelineLayout(RenderInstance.pl_device.device, 0, VK_NULL_HANDLE, 1, &layout);
+
+    PLCore_GraphicsPipeline Pipeline = PLCore_CreatePipeline(RenderInstance, Renderer, vertexInput, vShader, fShader, &pipelineLayout);
 
     uint32_t fps = 0;
     clock_t timer = clock();
     clock_t buttonCooldown = clock();
 
+    float xPos = 0.0f, yPos = 0.0f;
+    clock_t moveTimerX = clock(), moveTimerY = clock();
 
     while(!glfwWindowShouldClose(Window.window)) {
         // If The Vertex Data Has Been Updated
         if (glfwGetMouseButton(Window.window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && clock() - buttonCooldown > 200) {
             buttonCooldown = clock();
-            double xMouse;
-            glfwGetCursorPos(Window.window, &xMouse, VK_NULL_HANDLE);
-            srand((size_t)xMouse + clock() * time(NULL));
+            double xMouse, yMouse;
+            glfwGetCursorPos(Window.window, &xMouse, &yMouse);
 
-            float
-                xOffset = ((float)(rand() % 200)/200.0f)-0.5f,
-                yOffset = ((float)(rand() % 200)/200.0f)-0.5f;
-            float
-                colx = (float)sin(clock()%100),
-                coly = (float)sin(clock()%50),
-                colz = (float)sin(clock()%30);
+            PLCore_MoveDynamicBufferVertices(&dynVertexBuffer, vert, 3, -0.01f, -0.01f);
 
-            PLCore_vertex verts[] = {
-                    {{ 0.0f+xOffset, -0.5f+yOffset, 0.0f }, { colx, 1.0f,  1.0f }},
-                    {{ 0.5f+xOffset, 0.5f+yOffset, 0.0f }, { 0.0f, coly, 0.0f }},
-                    {{ -0.5f+xOffset, 0.5f+yOffset, 0.0f }, { 0.0f, 0.0f, colz }},
-            };
-            PLCore_PushVerticesToDynamicSizedBuffer(&dynVertexBuffer, sizeof(PLCore_vertex), 3, verts);
         } else if (glfwGetMouseButton(Window.window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && clock() - buttonCooldown > 200) {
-            PLCore_ClearDynamicSizedBufferData(&dynVertexBuffer);
+            PLCore_ClearDynamicVertexBufferData(&dynVertexBuffer);
         }
         if (dynVertexBuffer.dataChanged == 1) {
-            vertexBuffer = PLCore_RequestDynamicSizedBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_vertex));
+            vertexBuffer = PLCore_RequestDynamicVertexBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_Vertex));
         }
-        if (glfwGetKey(Window.window, GLFW_KEY_F1) == GLFW_PRESS) {
-#ifdef WIN32
-            CloseWrenInstance();
-            TerminateThread(ScriptThread, 0);
-            CloseHandle(ScriptThread);
-            ScriptThreadSafelyClosed = 1;
-#endif
+
+
+        if (glfwGetKey(Window.window, GLFW_KEY_A) && clock() - moveTimerX > 25) {
+            moveTimerX = clock();
+            xPos += 0.025f;
         }
+        if (glfwGetKey(Window.window, GLFW_KEY_D) && clock() - moveTimerX > 25) {
+            moveTimerX =  clock();
+            xPos -= 0.025f;
+        }
+        if (glfwGetKey(Window.window, GLFW_KEY_W) && clock() - moveTimerY > 25) {
+            moveTimerY =  clock();
+            yPos += 0.025f;
+        }
+        if (glfwGetKey(Window.window, GLFW_KEY_S) && clock() - moveTimerY > 25) {
+            moveTimerY =  clock();
+            yPos -= 0.025f;
+        }
+
+
+
 
         glfwPollEvents();
 
         PLCore_BeginFrame(RenderInstance, &Renderer, &Pipeline, &Window);
 
+        UNIFORM data;
+        data.x = xPos;
+        data.y = yPos;
+        PLCore_UploadDataToBuffer(RenderInstance.pl_device.device, &uniformBuffers[Renderer.priv_activeFrame].memory, sizeof(UNIFORM), &data);
+
+
+
+
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
 
+        vkCmdBindDescriptorSets(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.layout, 0, 1, &uniformSets[Renderer.priv_activeFrame], 0, VK_NULL_HANDLE);
 
         vkCmdBindPipeline(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.pipeline);
         VkDeviceSize offsets[] = {0};
@@ -310,13 +261,9 @@ int main() {
             fps = 0;
         }
     }
-#ifdef WIN32
-    if (!ScriptThreadSafelyClosed) {
-        TerminateThread(ScriptThread, 0);
-        CloseHandle(ScriptThread);
-        ScriptThreadSafelyClosed = 1;
-    }
-#endif
+    ScriptThreadSafelyClosed = CloseWrenScriptThread(ScriptHandle);
+    if (ScriptThreadSafelyClosed) printf("Safely Closed Wren Thread: %i\n", ScriptThreadSafelyClosed);
+
     glfwTerminate();
 
 
