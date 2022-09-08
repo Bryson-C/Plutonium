@@ -163,8 +163,10 @@ BOOL CloseWrenScriptThread(HANDLE thread) {
 #ifdef WIN32
     CloseWrenInstance();
     BOOL exitThreadResult = TerminateThread(thread, 0);
+
     const char* error = GetLastError();
     printf("%s\n", (error != NULL) ? error : "Exited Safely!");
+
     return exitThreadResult;
 #endif
     return TRUE;

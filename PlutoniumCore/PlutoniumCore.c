@@ -3,6 +3,7 @@
 //
 
 #include "PlutoniumCore.h"
+#include "../../stb_image.h"
 
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback( VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
@@ -1048,6 +1049,7 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
     PLCore_Image depthImage;
     depthImage.image = PLCore_Priv_CreateDepthBuffer(instance.pl_device.device, instance.pl_device.memoryProperties, &depthImage.view, depthFormat, window.resolution, instance.pl_device.graphicsQueue.familyIndex);
     renderer.pl_depthImage = depthImage;
+    renderer.pl_depthImage.requiredSize = 0;
 
     renderer.renderPass = PLCore_Priv_CreateRenderPass(instance.pl_device.device, renderFormat.format, depthFormat);
 
@@ -1145,12 +1147,17 @@ static void PLCore_RecreateRenderObjects(PLCore_RenderInstance instance, PLCore_
 }
 
 
-PLCore_Buffer PLCore_CreateBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage) {
+PLCore_Buffer PLCore_CreateBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage, VkMemoryPropertyFlagBits memoryFlags) {
     VkDeviceMemory memory;
-    VkBuffer buffer = PLCore_Priv_CreateBuffer(instance.pl_device.device, instance.pl_device.memoryProperties, size, instance.pl_device.transferQueue.familyIndex, usage, CPU_VISIBLE, &memory);
+    VkBuffer buffer = PLCore_Priv_CreateBuffer(instance.pl_device.device, instance.pl_device.memoryProperties, size, instance.pl_device.transferQueue.familyIndex, usage, memoryFlags, &memory);
     PLCore_Buffer pl_buffer = {
             .buffer = buffer,
-            .memory = memory
+            .memory = memory,
+            .bufferInfo = {
+                    .buffer = buffer,
+                    .offset = 0,
+                    .range = size
+            }
     };
     return pl_buffer;
 }
@@ -1305,9 +1312,7 @@ PLCore_Priv_CreateDescriptorLayoutBinding
 
 // TODO: Documentation Of Descriptor Code
 
-VkDescriptorSetLayout
-PLCore_Priv_CreateDescriptorLayout
-(VkDevice device, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings) {
+VkDescriptorSetLayout PLCore_Priv_CreateDescriptorLayout (VkDevice device, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings) {
     VkDescriptorSetLayout layout;
     VkDescriptorSetLayoutCreateInfo layoutInfo;
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1319,17 +1324,13 @@ PLCore_Priv_CreateDescriptorLayout
     vkCreateDescriptorSetLayout(device, &layoutInfo, VK_NULL_HANDLE, &layout);
     return layout;
 }
-VkDescriptorPoolSize
-PLCore_Priv_CreateDescritorPoolSize
-(VkDescriptorType type, uint32_t descriptorCount) {
+VkDescriptorPoolSize PLCore_Priv_CreateDescritorPoolSize (VkDescriptorType type, uint32_t descriptorCount) {
     return (VkDescriptorPoolSize) {
         .type = type,
         .descriptorCount = descriptorCount,
     };
 }
-VkDescriptorPool
-PLCore_Priv_CreateDescriptorPool
-(VkDevice device, uint32_t sets, VkDescriptorType type, uint32_t poolSizeCount, VkDescriptorPoolSize* sizes) {
+VkDescriptorPool PLCore_Priv_CreateDescriptorPool (VkDevice device, uint32_t sets, VkDescriptorType type, uint32_t poolSizeCount, VkDescriptorPoolSize* sizes) {
     VkDescriptorPool pool;
 
     VkDescriptorPoolCreateInfo poolInfo;
@@ -1343,10 +1344,7 @@ PLCore_Priv_CreateDescriptorPool
     vkCreateDescriptorPool(device, &poolInfo, VK_NULL_HANDLE, &pool);
     return pool;
 }
-
-VkDescriptorSet*
-PLCore_Priv_CreateDescriptorSets
-(VkDevice device, uint32_t count, VkDescriptorType type, VkDescriptorSetLayout layout, VkDescriptorPool pool) {
+VkDescriptorSet* PLCore_Priv_CreateDescriptorSets (VkDevice device, uint32_t count, VkDescriptorType type, VkDescriptorSetLayout layout, VkDescriptorPool pool) {
     VkDescriptorSet* sets = malloc(sizeof(VkDescriptorSet) * count);
 
     VkDescriptorSetLayout* descriptorLayouts = malloc(sizeof(VkDescriptorSetLayout) * count);
@@ -1365,7 +1363,6 @@ PLCore_Priv_CreateDescriptorSets
 
     return sets;
 }
-
 void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
     VkWriteDescriptorSet write;
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1381,5 +1378,238 @@ void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescrip
 
     vkUpdateDescriptorSets(device, 1, &write, 0, VK_NULL_HANDLE);
 }
+
+
+PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance, VkDescriptorType type, uint32_t maxDescriptorAllocations) {
+    PLCore_DescriptorPool pool;
+
+    VkDescriptorPoolSize poolSize = PLCore_Priv_CreateDescritorPoolSize(type, maxDescriptorAllocations);
+    pool.pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, maxDescriptorAllocations, type, 1, &poolSize);
+    pool.maxAllocations = maxDescriptorAllocations;
+    pool.currentAllocations = 0;
+    pool.type = type;
+
+    return pool;
+}
+
+PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance, PLCore_DescriptorPool* pool, uint32_t descriptorCount, uint32_t slot, uint32_t maxBoundAtOnce, VkShaderStageFlagBits stage) {
+    PLCore_Descriptor descriptor;
+    descriptor.layouts = malloc(sizeof(VkDescriptorSetLayout) * descriptorCount);
+    descriptor.sets = malloc(sizeof(VkDescriptorSet) * descriptorCount);
+
+    for (uint32_t i = 0; i < descriptorCount; i++) {
+        VkDescriptorSetLayoutBinding binding = PLCore_Priv_CreateDescriptorLayoutBinding(slot, pool->type, maxBoundAtOnce, stage);
+        descriptor.layouts[i] = PLCore_Priv_CreateDescriptorLayout(instance.pl_device.device, 1, &binding);
+        descriptor.sets[i] = PLCore_Priv_CreateDescriptorSets(instance.pl_device.device, 1, pool->type, descriptor.layouts[i], pool->pool)[0];
+    }
+    return descriptor;
+}
+void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
+    PLCore_Priv_WriteDescriptor(instance.pl_device.device, set, type, dstBinding, bufferInfo, imageInfo);
+}
+
+
+PLCore_Image PLCore_CreateImage(VkDevice device, VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlagBits usage, uint32_t queueFamilyIndex, VkPhysicalDeviceMemoryProperties memoryProperties) {
+    PLCore_Image image;
+
+    VkImageCreateInfo imageInfo;
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.pNext = VK_NULL_HANDLE;
+    imageInfo.flags = 0;
+    imageInfo.imageType = type;
+    imageInfo.format = format;
+    imageInfo.extent = extent;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = usage;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.queueFamilyIndexCount = 1;
+    imageInfo.pQueueFamilyIndices = &queueFamilyIndex;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    vkCreateImage(device, &imageInfo, VK_NULL_HANDLE, &image.image);
+
+    VkMemoryRequirements requirements;
+    vkGetImageMemoryRequirements(device, image.image, &requirements);
+
+    VkMemoryAllocateInfo allocInfo;
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.pNext = VK_NULL_HANDLE;
+    allocInfo.allocationSize = requirements.size;
+    // this means we will be allocating the image to the gpu
+    allocInfo.memoryTypeIndex = findMemoryType(memoryProperties, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vkAllocateMemory(device, &allocInfo, VK_NULL_HANDLE, &image.memory);
+    vkBindImageMemory(device, image.image, image.memory, 0);
+
+    VkImageViewCreateInfo viewInfo;
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.pNext = VK_NULL_HANDLE;
+    viewInfo.flags = 0;
+    viewInfo.image = image.image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+    viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.levelCount = 1;
+
+    vkCreateImageView(device, &viewInfo, VK_NULL_HANDLE, &image.view);
+
+    image.requiredSize = requirements.size;
+    return image;
+}
+void PLCore_DestroyImage(VkDevice device, PLCore_Image image) {
+    vkDestroyImageView(device, image.view, VK_NULL_HANDLE);
+    vkDestroyImage(device, image.image, VK_NULL_HANDLE);
+    vkFreeMemory(device, image.memory, VK_NULL_HANDLE);
+}
+
+void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, uint32_t queueFamily, VkExtent3D extent, VkCommandBuffer commandBuffer, VkQueue submitQueue) {
+    VkCommandBuffer cmd = commandBuffer;
+
+    VkCommandBufferBeginInfo beginInfo;
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.pNext = VK_NULL_HANDLE;
+    beginInfo.flags = 0;
+    beginInfo.pInheritanceInfo = VK_NULL_HANDLE;
+
+
+    vkBeginCommandBuffer(cmd, &beginInfo);
+
+    VkImageMemoryBarrier barrier;
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.pNext = VK_NULL_HANDLE;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.srcQueueFamilyIndex = queueFamily;
+    barrier.dstQueueFamilyIndex = queueFamily;
+    barrier.image = image.image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.levelCount = 1;
+
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &barrier);
+
+    VkBufferImageCopy copy;
+    copy.bufferOffset = 0;
+    copy.bufferRowLength = 0;
+    copy.bufferImageHeight = 0;
+    copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copy.imageSubresource.layerCount = 1;
+    copy.imageSubresource.baseArrayLayer = 0;
+    copy.imageSubresource.mipLevel = 0;
+    copy.imageOffset = (VkOffset3D){0,0,0};
+    copy.imageExtent = extent;
+
+    vkCmdCopyBufferToImage(cmd, buffer.buffer, image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+    VkImageMemoryBarrier finalBarrier = barrier;
+    finalBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    finalBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    finalBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    finalBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE, 1, &finalBarrier);
+    vkEndCommandBuffer(cmd);
+
+    VkSubmitInfo submitInfo = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = VK_NULL_HANDLE,
+            .waitSemaphoreCount = 0,
+            .pWaitSemaphores = VK_NULL_HANDLE,
+            .pWaitDstStageMask = VK_NULL_HANDLE,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmd,
+            .signalSemaphoreCount = 0,
+            .pSignalSemaphores = VK_NULL_HANDLE,
+    };
+    vkQueueSubmit(submitQueue, 1, &submitInfo, VK_NULL_HANDLE);
+}
+// TODO: Make Texture Consume Descriptor Set (Instead Of Creating A New Descriptor)
+PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkDescriptorSet set, uint32_t setBinding, const char* path) {
+    int32_t width, height, channels;
+    void* pixels = stbi_load(path, &width, &height, &channels, STBI_rgb_alpha);
+    if (pixels == VK_NULL_HANDLE) fprintf(stderr, "%s", "big sad: loading images\n");
+
+    VkDeviceSize imageSize = width * height * 4;
+    VkFormat imageFormat = VK_FORMAT_R8G8B8A8_SRGB;
+    VkExtent3D imageExtent = (VkExtent3D){width, height, 1};
+
+
+
+    PLCore_Image textureImage = PLCore_CreateImage(instance.pl_device.device, VK_IMAGE_TYPE_2D, imageFormat, imageExtent, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, instance.pl_device.transferQueue.familyIndex, instance.pl_device.memoryProperties);
+
+    PLCore_Buffer stagingBuffer = PLCore_CreateBuffer(instance, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, CPU_COHERENT | CPU_VISIBLE);
+
+    PLCore_UploadDataToBuffer(instance.pl_device.device, &stagingBuffer.memory, imageSize, pixels);
+
+    stbi_image_free(pixels);
+
+    VkCommandBuffer* cmdBuffer = PLCore_Priv_CreateCommandBuffers(instance.pl_device.device, renderer.graphicsPool.pool, 1);
+    PLCore_TransitionTextureLayout(stagingBuffer,
+                                   textureImage,
+                                   instance.pl_device.graphicsQueue.familyIndex,
+                                   imageExtent,
+                                   *cmdBuffer,
+                                   instance.pl_device.graphicsQueue.queue);
+
+    PLCore_Texture texture;
+    texture.image = textureImage;
+    texture.set = set;
+    texture.index = -1; //Because We Dont Know/Need An Index Currently
+
+
+
+    vkDestroyBuffer(instance.pl_device.device, stagingBuffer.buffer, VK_NULL_HANDLE);
+
+    return texture;
+}
+
+
+
+VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode) {
+    VkSampler sampler;
+
+    VkSamplerCreateInfo samplerInfo;
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.pNext = VK_NULL_HANDLE;
+    samplerInfo.flags = 0;
+    samplerInfo.magFilter = filter;
+    samplerInfo.minFilter = filter;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.addressModeU = addressMode;
+    samplerInfo.addressModeV = addressMode;
+    samplerInfo.addressModeW = addressMode;
+    samplerInfo.mipLodBias = 0.0f;
+
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = 1.0f;
+
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+    vkCreateSampler(device, &samplerInfo, VK_NULL_HANDLE, &sampler);
+    return sampler;
+}
+
+
+
+
 
 
