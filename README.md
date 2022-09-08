@@ -6,6 +6,8 @@ Im coming from a C++ background but im trying my best to spread information that
 I will also not be explaining build systems because I myself am terrible at them.
 I may also forget something or mispell some things so keep that in mind
 
+### **Reminder: Clean the repository. Currently I Just Dump Files However I Feel Like**
+
 **As of 7/24/22 I have started rebuilding the abstractions.h and abstractions.cpp files; The have been moved to the `PlutoniumCore` folder.**
 
 **As of 6/28/22 I have found the descriptor error. The error was occuring due to the descriptor set layout requesting 2 descriptors rather than one.**
