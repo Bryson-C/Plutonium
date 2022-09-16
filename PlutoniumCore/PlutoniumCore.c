@@ -1380,18 +1380,52 @@ void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescrip
 }
 
 
+PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t typeCount, VkDescriptorType* types, VkShaderStageFlagBits* stages, uint32_t* maxAllocations) {
+    uint32_t totalAllocations = 0;
+    VkDescriptorPoolSize* sizes = malloc(sizeof(VkDescriptorPoolSize) * typeCount);
+    VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * typeCount);
+    for (uint32_t i = 0; i < typeCount; i++) {
+        sizes[i].descriptorCount = types[i];
+        sizes[i].type = types[i];
+
+        totalAllocations += maxAllocations[i];
+        bindings[i].descriptorCount = maxAllocations[i];
+        bindings[i].binding = i;
+        bindings[i].descriptorType = types[i];
+        bindings[i].stageFlags = stages[i];
+        bindings[i].pImmutableSamplers = VK_NULL_HANDLE;
+    }
+    PLCore_DescriptorPoolAllocator allocator = {
+        .sizes = sizes,
+        .bindings = bindings,
+        .types = types,
+        .poolSizeCount = typeCount,
+        .totalAllocations = totalAllocations,
+    };
+    return allocator;
+}
+PLCore_DescriptorPool PLCore_CreateDescriptprPoolFromAllocator(PLCore_RenderInstance instance, PLCore_DescriptorPoolAllocator allocator) {
+    VkDescriptorType types;
+    for (uint32_t i = 0; i < allocator.types; i++) {
+        types << allocator.types[i];
+    }
+    return (PLCore_DescriptorPool) {
+        .pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, allocator.totalAllocations, types, allocator.poolSizeCount, allocator.sizes),
+        .maxAllocations = allocator.totalAllocations,
+        .currentAllocations = 0,
+        .type = types,
+    };
+}
 PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance, VkDescriptorType type, uint32_t maxDescriptorAllocations) {
-    PLCore_DescriptorPool pool;
-
     VkDescriptorPoolSize poolSize = PLCore_Priv_CreateDescritorPoolSize(type, maxDescriptorAllocations);
-    pool.pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, maxDescriptorAllocations, type, 1, &poolSize);
-    pool.maxAllocations = maxDescriptorAllocations;
-    pool.currentAllocations = 0;
-    pool.type = type;
-
+    PLCore_DescriptorPool pool = {
+            .pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, maxDescriptorAllocations, type, 1, &poolSize),
+            .maxAllocations = maxDescriptorAllocations,
+            .currentAllocations = 0,
+            .type = type,
+    };
     return pool;
 }
-
 PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance, PLCore_DescriptorPool* pool, uint32_t descriptorCount, uint32_t slot, uint32_t maxBoundAtOnce, VkShaderStageFlagBits stage) {
     PLCore_Descriptor descriptor;
     descriptor.layouts = malloc(sizeof(VkDescriptorSetLayout) * descriptorCount);
@@ -1537,7 +1571,6 @@ void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, ui
     };
     vkQueueSubmit(submitQueue, 1, &submitInfo, VK_NULL_HANDLE);
 }
-// TODO: Make Texture Consume Descriptor Set (Instead Of Creating A New Descriptor)
 PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkDescriptorSet set, uint32_t setBinding, const char* path) {
     int32_t width, height, channels;
     void* pixels = stbi_load(path, &width, &height, &channels, STBI_rgb_alpha);

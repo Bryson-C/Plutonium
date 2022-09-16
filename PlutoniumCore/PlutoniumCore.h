@@ -169,8 +169,6 @@ PLCore_Window           PLCore_CreateWindow(VkInstance instance, uint32_t width,
 PLCore_Renderer         PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window);
 PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader, VkPipelineLayout* layout);
 
-PLCore_ShaderModule s_GlobalVertexShader;
-PLCore_ShaderModule s_GlobalFragmentShader;
 PLCore_GraphicsPipeline PLCore_CreatePipelineFromBuilder(PLCore_RenderInstance instance, PLCore_Renderer renderer, PLCore_Window window, PLCore_PipelineBuilder builder);
 
 PLCore_Buffer           PLCore_CreateBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage, VkMemoryPropertyFlagBits memoryFlags);
@@ -247,6 +245,13 @@ VkDescriptorSet* PLCore_Priv_CreateDescriptorSets(VkDevice device, uint32_t coun
 void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
 
 typedef struct {
+    VkDescriptorPoolSize* sizes;
+    VkDescriptorSetLayoutBinding* bindings;
+    VkDescriptorType* types;
+    uint32_t poolSizeCount;
+    uint32_t totalAllocations;
+} PLCore_DescriptorPoolAllocator;
+typedef struct {
     VkDescriptorType type;
     uint32_t maxAllocations, currentAllocations;
     VkDescriptorPool pool;
@@ -256,6 +261,8 @@ typedef struct {
     VkDescriptorSet* sets;
 } PLCore_Descriptor;
 
+PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t typeCount, VkDescriptorType* types, VkShaderStageFlagBits* stages, uint32_t* maxAllocations);
+PLCore_DescriptorPool PLCore_CreateDescriptprPoolFromAllocator(PLCore_RenderInstance instance, PLCore_DescriptorPoolAllocator allocator);
 PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance, VkDescriptorType type, uint32_t maxDescriptorAllocations);
 PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance, PLCore_DescriptorPool* pool, uint32_t descriptorCount, uint32_t slot, uint32_t maxBoundAtOnce, VkShaderStageFlagBits stage);
 void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
