@@ -15,6 +15,12 @@
 #include <vulkan/vulkan.h>      // required: much functionality
 #include <glfw3.h>              // required: much functionality
 
+#define PLCORE_REFLECTION
+
+#ifdef PLCORE_REFLECTION
+    #include "SpirvReflection.h"
+#endif
+
 enum PLCore_MemoryProperties {
     GPU_LOCAL = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
     CPU_VISIBLE = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
@@ -103,6 +109,10 @@ typedef struct {
     const char* path;
     VkShaderModule module;
     VkResult result;
+    #ifdef PLCORE_REFLECTION
+        SpvReflectResult reflectionModuleResult;
+        SpvReflectShaderModule reflectionModule;
+    #endif
 } PLCore_ShaderModule;
 typedef struct {
     int32_t hasShaders;
@@ -149,6 +159,16 @@ typedef struct {
     VkDescriptorSet set;
     int32_t index;
 } PLCore_Texture;
+
+#ifdef PLCORE_REFLECTION
+
+    SpvReflectInterfaceVariable** PLCore_ShaderReflectInputVariables(PLCore_ShaderModule shaderModule);
+    inline void PLCore_Priv_PrintReflectionInputVariables(uint32_t varCount, SpvReflectInterfaceVariable** vars) {}
+
+    SpvReflectDescriptorSet** PLCore_ShaderReflectDescriptorSets(PLCore_ShaderModule shaderModule, uint32_t* count);
+    void PLCore_Priv_PrintReflectionDescriptorSets(uint32_t setCount, SpvReflectDescriptorSet** sets);
+
+#endif
 
 
 
@@ -272,8 +292,12 @@ void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set
 PLCore_Image PLCore_CreateImage(VkDevice device, VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlagBits usage, uint32_t queueFamilyIndex, VkPhysicalDeviceMemoryProperties memoryProperties);
 void PLCore_DestroyImage(VkDevice device, PLCore_Image image);
 void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, uint32_t queueFamily, VkExtent3D extent, VkCommandBuffer commandBuffer, VkQueue submitQueue);
-PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkDescriptorSet set, uint32_t setBinding, const char* path);
+PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkDescriptorSet set, const char* path);
 VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode);
+
+
+
+
 
 
 #endif //PLUTONIUM_PLUTONIUMCORE_H

@@ -548,6 +548,10 @@ PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevic
 
     shader.result = vkCreateShaderModule(device, &shaderInfo, VK_NULL_HANDLE, &shader.module);
 
+    #ifdef PLCORE_REFLECTION
+        shader.reflectionModuleResult = spvReflectCreateShaderModule(shader.size, shader.buffer, &shader.reflectionModule);
+    #endif
+
     return shader;
 }
 VkPipelineShaderStageCreateInfo                 PLCore_Priv_CreateShaderStage(PLCore_ShaderModule shader, VkShaderStageFlagBits shaderStage) {
@@ -1385,7 +1389,7 @@ PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t typ
     VkDescriptorPoolSize* sizes = malloc(sizeof(VkDescriptorPoolSize) * typeCount);
     VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * typeCount);
     for (uint32_t i = 0; i < typeCount; i++) {
-        sizes[i].descriptorCount = types[i];
+        sizes[i].descriptorCount = maxAllocations[i];
         sizes[i].type = types[i];
 
         totalAllocations += maxAllocations[i];
@@ -1405,9 +1409,11 @@ PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t typ
     return allocator;
 }
 PLCore_DescriptorPool PLCore_CreateDescriptprPoolFromAllocator(PLCore_RenderInstance instance, PLCore_DescriptorPoolAllocator allocator) {
-    VkDescriptorType types;
-    for (uint32_t i = 0; i < allocator.types; i++) {
-        types << allocator.types[i];
+    VkDescriptorType types = 0;
+
+    // TODO: Suspected Faulty Code
+    for (uint32_t i = 0; i < allocator.poolSizeCount; i++) {
+        types = types + allocator.types[i];
     }
     return (PLCore_DescriptorPool) {
         .pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, allocator.totalAllocations, types, allocator.poolSizeCount, allocator.sizes),
@@ -1571,7 +1577,7 @@ void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, ui
     };
     vkQueueSubmit(submitQueue, 1, &submitInfo, VK_NULL_HANDLE);
 }
-PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkDescriptorSet set, uint32_t setBinding, const char* path) {
+PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkDescriptorSet set, const char* path) {
     int32_t width, height, channels;
     void* pixels = stbi_load(path, &width, &height, &channels, STBI_rgb_alpha);
     if (pixels == VK_NULL_HANDLE) fprintf(stderr, "%s", "big sad: loading images\n");
@@ -1642,6 +1648,50 @@ VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddres
 }
 
 
+
+#ifdef PLCORE_REFLECTION
+
+SpvReflectDescriptorSet** PLCore_ShaderReflectDescriptorSets(PLCore_ShaderModule shaderModule, uint32_t* count) {
+    uint32_t descriptorCount = 0;
+    SpvReflectResult descriptorResults = spvReflectEnumerateDescriptorSets(&shaderModule.reflectionModule, &descriptorCount,VK_NULL_HANDLE);
+    if (descriptorResults != SPV_REFLECT_RESULT_SUCCESS) fprintf(stderr, "Error (stupid nerd)\n");
+
+    SpvReflectDescriptorSet** sets = (SpvReflectDescriptorSet**) malloc(sizeof(SpvReflectInterfaceVariable*) * descriptorCount);
+    descriptorResults = spvReflectEnumerateDescriptorSets(&shaderModule.reflectionModule, &descriptorCount, sets);
+
+    if (descriptorResults != SPV_REFLECT_RESULT_SUCCESS) fprintf(stderr, "Error (stupid nerd)\n");
+
+    if (count != VK_NULL_HANDLE) *count = descriptorCount;
+    return sets;
+}
+void PLCore_Priv_PrintReflectionDescriptorSets(uint32_t setCount, SpvReflectDescriptorSet** sets) {
+    for (int i = 0; i < setCount; i++) {
+        printf("Shader Descriptor Set %i: \n\tBindingCount: %i\n", sets[i]->set, sets[i]->binding_count);
+        for (int j = 0; j < sets[i]->binding_count; j++) {
+            printf("\tSet: %i\n", sets[i]->bindings[j]->set);
+        }
+    }
+}
+
+SpvReflectInterfaceVariable** PLCore_ShaderReflectInputVariables(PLCore_ShaderModule shaderModule) {
+    uint32_t variableCount = 0;
+    SpvReflectResult inpVarResult = spvReflectEnumerateInputVariables(&shaderModule.reflectionModule, &variableCount, VK_NULL_HANDLE);
+    if (inpVarResult != SPV_REFLECT_RESULT_SUCCESS)
+        fprintf(stderr, "Oopsy Doopsy. Failed Enumerating Shader Variables: Code %i\n", inpVarResult);
+
+    SpvReflectInterfaceVariable** inputVars = (SpvReflectInterfaceVariable**)malloc(variableCount * sizeof(SpvReflectInterfaceVariable*));
+    inpVarResult = spvReflectEnumerateInputVariables(&shaderModule.reflectionModule, &variableCount, inputVars);
+    if (inpVarResult != SPV_REFLECT_RESULT_SUCCESS)
+        fprintf(stderr, "Oopsy Doopsy. Failed Enumerating Shader Variables: Code %i\n", inpVarResult);
+
+    for (uint32_t i = 0; i < variableCount; i++) {
+        SpvReflectInterfaceVariable var = (*inputVars)[i];
+        printf("Input Variable %i: %s\n", var.location, var.name);
+    }
+
+    return inputVars;
+}
+#endif
 
 
 
