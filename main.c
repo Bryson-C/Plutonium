@@ -27,19 +27,13 @@ int main() {
     PLCore_ShaderModule vShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\v.spv", VK_SHADER_STAGE_VERTEX_BIT, "main");
     PLCore_ShaderModule fShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\f.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "main");
 
-
-    uint32_t refSetCount[2] = {0, 0};
-    SpvReflectDescriptorSet** refSets[] =
-            {
-                PLCore_ShaderReflectDescriptorSets(vShader, &refSetCount[0]),
-                PLCore_ShaderReflectDescriptorSets(fShader, &refSetCount[1]),
-            };
-    for (int i = 0; i < 2; i++)
-        PLCore_Priv_PrintReflectionDescriptorSets(refSets[i], refSetCount[i]);
-
-
-
-
+    uint32_t vShaderDescriptorCount = 0;
+    SpvReflectDescriptorSet** vShaderDescriptors = PLCore_ShaderReflectDescriptorSets(vShader, &vShaderDescriptorCount);
+    PLCore_Priv_PrintReflectionDescriptorSets(vShaderDescriptors, vShaderDescriptorCount);
+    
+    uint32_t fShaderDescriptorCount = 0;
+    SpvReflectDescriptorSet** fShaderDescriptors = PLCore_ShaderReflectDescriptorSets(fShader, &fShaderDescriptorCount);
+    PLCore_Priv_PrintReflectionDescriptorSets(fShaderDescriptors, fShaderDescriptorCount);
 
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
@@ -64,6 +58,7 @@ int main() {
             PLCore_CreateBuffer(RenderInstance, sizeof(UNIFORM), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT),
             PLCore_CreateBuffer(RenderInstance, sizeof(UNIFORM), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT)
     };
+
 
 
 
@@ -133,21 +128,14 @@ int main() {
     };
     VkPipelineVertexInputStateCreateInfo vertexInput = PLCore_Priv_CreateVertexInput(3, attribs, 1, bindings);
 
-    /*
+
     uint32_t descriptorLayouts = 1;
     VkDescriptorSetLayout layouts[] = {
             uniformSets.layouts[0],
             //imageSet.layouts[0]
     };
-    */
-    //VkPipelineLayout pipelineLayout = PLCore_Priv_CreatePipelineLayout(RenderInstance.pl_device.device, 0, VK_NULL_HANDLE, descriptorLayouts, layouts);
-    PLCore_ShaderModule shaderMods[] = {
-            vShader, fShader
-    };
-    uint32_t descriptorLayouts = 1;
-    VkDescriptorSetLayout* layouts;
-    VkPipelineLayout pipelineLayout = PLCore_CreatePipelineLayoutFromShader(RenderInstance, shaderMods, 2, &layouts, &descriptorLayouts);
 
+    VkPipelineLayout pipelineLayout = PLCore_Priv_CreatePipelineLayout(RenderInstance.pl_device.device, 0, VK_NULL_HANDLE, descriptorLayouts, layouts);
     PLCore_GraphicsPipeline Pipeline = PLCore_CreatePipeline(RenderInstance, Renderer, vertexInput, vShader, fShader, &pipelineLayout);
 
     uint32_t fps = 0;

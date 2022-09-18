@@ -160,6 +160,23 @@ typedef struct {
     VkDescriptorSet set;
     int32_t index;
 } PLCore_Texture;
+typedef struct {
+    VkDescriptorPoolSize* sizes;
+    VkDescriptorSetLayoutBinding* bindings;
+    VkDescriptorType* types;
+    uint32_t poolSizeCount;
+    uint32_t totalAllocations;
+} PLCore_DescriptorPoolAllocator;
+typedef struct {
+    VkDescriptorType type;
+    uint32_t maxAllocations, currentAllocations;
+    VkDescriptorPool pool;
+} PLCore_DescriptorPool;
+typedef struct {
+    VkDescriptorSetLayout* layouts;
+    VkDescriptorSet* sets;
+    uint32_t count;
+} PLCore_Descriptor;
 
 #ifdef PLCORE_REFLECTION
 
@@ -169,9 +186,10 @@ typedef struct {
 
     inline void PLCore_Priv_PrintReflectionInputVariables(SpvReflectInterfaceVariable** vars, uint32_t varCount) {}
     void PLCore_Priv_PrintReflectionDescriptorSets(SpvReflectDescriptorSet** sets, uint32_t setCount);
-
-    VkPipelineLayout PLCore_CreatePipelineLayoutFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule* shaderModules, uint32_t shaderCount, VkDescriptorSetLayout** descriptorLayouts, uint32_t* descriptorLayoutCount);
-
+/*
+    // DEPRECATED: Shader Reflection Is Not Working
+    VkPipelineLayout PLCore_CreatePipelineLayoutFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule* shaderModules, uint32_t shaderCount, PLCore_Descriptor** descriptorLayouts, uint32_t* descriptorLayoutCount);
+*/
 #endif
 
 
@@ -268,22 +286,7 @@ VkDescriptorPool PLCore_Priv_CreateDescriptorPool(VkDevice device, uint32_t sets
 VkDescriptorSet* PLCore_Priv_CreateDescriptorSets(VkDevice device, uint32_t count, VkDescriptorType type, VkDescriptorSetLayout layout, VkDescriptorPool pool);
 void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
 
-typedef struct {
-    VkDescriptorPoolSize* sizes;
-    VkDescriptorSetLayoutBinding* bindings;
-    VkDescriptorType* types;
-    uint32_t poolSizeCount;
-    uint32_t totalAllocations;
-} PLCore_DescriptorPoolAllocator;
-typedef struct {
-    VkDescriptorType type;
-    uint32_t maxAllocations, currentAllocations;
-    VkDescriptorPool pool;
-} PLCore_DescriptorPool;
-typedef struct {
-    VkDescriptorSetLayout* layouts;
-    VkDescriptorSet* sets;
-} PLCore_Descriptor;
+
 
 PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t typeCount, VkDescriptorType* types, VkShaderStageFlagBits* stages, uint32_t* maxAllocations);
 PLCore_DescriptorPool PLCore_CreateDescriptprPoolFromAllocator(PLCore_RenderInstance instance, PLCore_DescriptorPoolAllocator allocator);
