@@ -109,6 +109,7 @@ typedef struct {
     const char* path;
     VkShaderModule module;
     VkResult result;
+    VkShaderStageFlagBits stage;
     #ifdef PLCORE_REFLECTION
         SpvReflectResult reflectionModuleResult;
         SpvReflectShaderModule reflectionModule;
@@ -162,11 +163,14 @@ typedef struct {
 
 #ifdef PLCORE_REFLECTION
 
-    SpvReflectInterfaceVariable** PLCore_ShaderReflectInputVariables(PLCore_ShaderModule shaderModule);
-    inline void PLCore_Priv_PrintReflectionInputVariables(uint32_t varCount, SpvReflectInterfaceVariable** vars) {}
-
+    SpvReflectInterfaceVariable** PLCore_ShaderReflectInputVariables(PLCore_ShaderModule shaderModule, uint32_t* count);
     SpvReflectDescriptorSet** PLCore_ShaderReflectDescriptorSets(PLCore_ShaderModule shaderModule, uint32_t* count);
-    void PLCore_Priv_PrintReflectionDescriptorSets(uint32_t setCount, SpvReflectDescriptorSet** sets);
+    SpvReflectBlockVariable** PLCore_ShaderReflectPushConstants(PLCore_ShaderModule shaderModule, uint32_t* count);
+
+    inline void PLCore_Priv_PrintReflectionInputVariables(SpvReflectInterfaceVariable** vars, uint32_t varCount) {}
+    void PLCore_Priv_PrintReflectionDescriptorSets(SpvReflectDescriptorSet** sets, uint32_t setCount);
+
+    VkPipelineLayout PLCore_CreatePipelineLayoutFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule* shaderModules, uint32_t shaderCount, VkDescriptorSetLayout** descriptorLayouts, uint32_t* descriptorLayoutCount);
 
 #endif
 
@@ -211,7 +215,7 @@ void PLCore_Priv_AddColorBlendStateToPipelineBuilder(PLCore_PipelineBuilder* bui
 void PLCore_Priv_AddRenderPassToPipelineBuilder(PLCore_PipelineBuilder* builder, VkRenderPass renderPass);
 void PLCore_Priv_AddDepthStencilToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineDepthStencilStateCreateInfo depthStencil);
 
-PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevice device, const char* path, const char* entryPoint);
+PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevice device, const char* path, VkShaderStageFlagBits stage, const char* entryPoint);
 VkPipelineShaderStageCreateInfo                 PLCore_Priv_CreateShaderStage(PLCore_ShaderModule shader, VkShaderStageFlagBits shaderStage);
 VkVertexInputAttributeDescription               PLCore_Priv_CreateVertexAttribute(uint32_t binding, uint32_t location, VkFormat format, uint32_t offset);
 VkVertexInputBindingDescription                 PLCore_Priv_CreateVertexBinding(uint32_t binding, VkVertexInputRate inputRate, VkDeviceSize stride);

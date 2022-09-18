@@ -525,10 +525,11 @@ VkFramebuffer PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2D resoluti
 }
 
 
-PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevice device, const char* path, const char* entryPoint) {
+PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevice device, const char* path, VkShaderStageFlagBits stage, const char* entryPoint) {
     PLCore_ShaderModule shader;
     shader.path = path;
     shader.entryPoint = entryPoint;
+    shader.stage = stage;
 
     fopen_s(&shader.file, path, "rb");
     fseek(shader.file, 0, SEEK_END);
@@ -1097,6 +1098,10 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
             PLCore_Priv_CreateShaderStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT),
             PLCore_Priv_CreateShaderStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT),
     };
+    PLCore_ShaderModule shaderModules[] = {
+            vertexShader,
+            fragmentShader
+    };
 
     if (layout == VK_NULL_HANDLE)
         pipeline.layout = PLCore_Priv_CreatePipelineLayout(instance.pl_device.device, 0, VK_NULL_HANDLE, 0, VK_NULL_HANDLE);
@@ -1664,16 +1669,16 @@ SpvReflectDescriptorSet** PLCore_ShaderReflectDescriptorSets(PLCore_ShaderModule
     if (count != VK_NULL_HANDLE) *count = descriptorCount;
     return sets;
 }
-void PLCore_Priv_PrintReflectionDescriptorSets(uint32_t setCount, SpvReflectDescriptorSet** sets) {
+void PLCore_Priv_PrintReflectionDescriptorSets(SpvReflectDescriptorSet** sets, uint32_t setCount) {
     for (int i = 0; i < setCount; i++) {
         printf("Shader Descriptor Set %i: \n\tBindingCount: %i\n", sets[i]->set, sets[i]->binding_count);
         for (int j = 0; j < sets[i]->binding_count; j++) {
-            printf("\tSet: %i\n", sets[i]->bindings[j]->set);
+            printf("\tSet: %i (%i)\n", sets[i]->bindings[j]->set, sets[i]->bindings[j]->descriptor_type);
         }
     }
 }
 
-SpvReflectInterfaceVariable** PLCore_ShaderReflectInputVariables(PLCore_ShaderModule shaderModule) {
+SpvReflectInterfaceVariable** PLCore_ShaderReflectInputVariables(PLCore_ShaderModule shaderModule, uint32_t* count) {
     uint32_t variableCount = 0;
     SpvReflectResult inpVarResult = spvReflectEnumerateInputVariables(&shaderModule.reflectionModule, &variableCount, VK_NULL_HANDLE);
     if (inpVarResult != SPV_REFLECT_RESULT_SUCCESS)
@@ -1688,9 +1693,86 @@ SpvReflectInterfaceVariable** PLCore_ShaderReflectInputVariables(PLCore_ShaderMo
         SpvReflectInterfaceVariable var = (*inputVars)[i];
         printf("Input Variable %i: %s\n", var.location, var.name);
     }
-
+    if (count != VK_NULL_HANDLE) *count = variableCount;
     return inputVars;
 }
+SpvReflectBlockVariable** PLCore_ShaderReflectPushConstants(PLCore_ShaderModule shaderModule, uint32_t* count) {
+    uint32_t pushCount = 0;
+    SpvReflectResult result = spvReflectEnumeratePushConstantBlocks(&shaderModule.reflectionModule, &pushCount, VK_NULL_HANDLE);
+    if (result != SPV_REFLECT_RESULT_SUCCESS)
+        fprintf(stderr, "Error\n");
+
+    SpvReflectBlockVariable** pushConstants = (SpvReflectBlockVariable**)malloc(pushCount * sizeof(SpvReflectBlockVariable*));
+    result = spvReflectEnumeratePushConstantBlocks(&shaderModule.reflectionModule, &pushCount, pushConstants);
+    if (result != SPV_REFLECT_RESULT_SUCCESS)
+        fprintf(stderr, "Error\n");
+
+    if (count != VK_NULL_HANDLE) *count = pushCount;
+    return pushConstants;
+}
+
+VkPipelineLayout PLCore_CreatePipelineLayoutFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule* shaderModules, uint32_t shaderCount, VkDescriptorSetLayout** descriptorLayouts, uint32_t* descriptorLayoutCount) {
+
+    uint32_t pushConstantCount = 0;
+    for (int i = 0; i < shaderCount; i++) {
+        uint32_t count = 0;
+        spvReflectEnumeratePushConstantBlocks(&shaderModules[i].reflectionModule, &count, VK_NULL_HANDLE);
+        pushConstantCount += count;
+    }
+    VkPushConstantRange* ranges = malloc(sizeof(VkPushConstantRange) * pushConstantCount);
+    int currentPushConstant = 0;
+    for (int i = 0; i < shaderCount; i++) {
+        uint32_t count = 0;
+        SpvReflectBlockVariable** pushConstants = PLCore_ShaderReflectPushConstants(shaderModules[i], &count);
+        for (int j = 0; j < count; i++) {
+            ranges[j].size = pushConstants[currentPushConstant]->size;
+            ranges[j].offset = pushConstants[currentPushConstant]->offset;
+            ranges[j].stageFlags = shaderModules[i].stage;
+            currentPushConstant++;
+        }
+    }
+
+    uint32_t descriptorCount = 0;
+    for (int i = 0; i < shaderCount; i++) {
+        uint32_t count = 0;
+        spvReflectEnumerateDescriptorSets(&shaderModules[i].reflectionModule, &count, VK_NULL_HANDLE);
+        descriptorCount += count;
+    }
+    VkDescriptorSetLayout* layouts = malloc(sizeof(VkDescriptorSetLayout) * descriptorCount);
+    int currentLayout = 0;
+    for (int i = 0; i < shaderCount; i++) {
+        uint32_t count = 0;
+        SpvReflectDescriptorSet** descriptorSets = PLCore_ShaderReflectDescriptorSets(shaderModules[i], &count);
+        for (int j = 0; j < count; i++) {
+            VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * (*descriptorSets)[i].binding_count);
+            for (int k = 0; k < descriptorSets[j]->binding_count; k++) {
+                bindings[k] = PLCore_Priv_CreateDescriptorLayoutBinding(descriptorSets[i]->bindings[j]->set,
+                                                                        (VkDescriptorType)descriptorSets[i]->bindings[j]->descriptor_type,
+                                                                        descriptorSets[i]->bindings[j]->count,
+                                                                        shaderModules[i].stage);
+            }
+            layouts[currentLayout++] = PLCore_Priv_CreateDescriptorLayout(instance.pl_device.device, descriptorSets[j]->binding_count, bindings);
+        }
+    }
+
+
+    VkPipelineLayoutCreateInfo info = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = VK_NULL_HANDLE,
+            .flags = 0,
+            .pushConstantRangeCount = pushConstantCount,
+            .pPushConstantRanges = (pushConstantCount > 0) ? ranges : VK_NULL_HANDLE,
+            .setLayoutCount = descriptorCount,
+            .pSetLayouts = (descriptorCount > 0) ? layouts : VK_NULL_HANDLE,
+    };
+    if (descriptorLayouts != VK_NULL_HANDLE) *(*descriptorLayouts) = *layouts;
+    if (descriptorLayoutCount != VK_NULL_HANDLE) *descriptorLayoutCount = descriptorCount;
+
+    VkPipelineLayout layout;
+    vkCreatePipelineLayout(instance.pl_device.device, &info, VK_NULL_HANDLE, &layout);
+    return layout;
+}
+
 #endif
 
 

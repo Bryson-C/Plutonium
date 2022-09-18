@@ -5,85 +5,10 @@
 #include <time.h>
 #include <math.h>
 
-#include <windows.h>
-
 #define STB_IMAGE_IMPLEMENTATION 1
 #include "lib/stb_image.h"
 
-
-/*
-//#include "Abstraction/Abstractions.h"
-#include "RenderState/RenderState.h"
-
-
-#define STB_IMAGE_IMPLEMENTATION 1
-#include "lib/stb_image.h"
-#include "vulkan/vulkan.h"
-#include "shaderc.h"
-
-
-
-typedef uint32_t U32;
-
-static Buffer s_IndexBuffer;
-static U32* s_GlobalIndices = VK_NULL_HANDLE;
-static size_t s_GlobalIndexCount = 0;
-static size_t s_GlobalIndexSize = 100;
-static U32 s_GlobalIndexOffset = 0;
-static bool s_GlobalIndicesChanged = false;
-
-static Buffer s_VertexBuffer;
-static vertex* s_GlobalVertices = VK_NULL_HANDLE;
-static size_t s_GlobalVertexCount = 0;
-static size_t s_GlobalVertexSize = 100;
-static bool s_GlobalVerticesChanged = false;
-
-vertex* CreateNewQuadViaVertices(float x, float y, float w, float h, Float3 color, Float textureIndex) {
-    if (s_GlobalVertices == VK_NULL_HANDLE) s_GlobalVertices = malloc(sizeof(vertex) * s_GlobalVertexSize);
-    if (s_GlobalVertexCount >= s_GlobalVertexSize - 10) s_GlobalVertices = realloc(s_GlobalVertices, sizeof(vertex) * (s_GlobalVertexSize *= 2));
-
-    if (s_GlobalIndices == VK_NULL_HANDLE) s_GlobalIndices =  malloc(sizeof(U32) * s_GlobalIndexSize);
-    if (s_GlobalIndexCount >= s_GlobalIndexSize - 10) s_GlobalIndices = realloc(s_GlobalIndices, sizeof(U32) * (s_GlobalIndexSize *= 2));
-
-    vertex vertices[4] = {
-        {{x,y,0.0f},color, {1.0f, 0.0f}, textureIndex},
-        {{x + w,y,0.0f},color,{0.0f, 0.0f}, textureIndex},
-        {{x + w,y + h,0.0f},color,{0.0f, 1.0f}, textureIndex},
-        {{x,y + h,0.0f},color,{1.0f, 1.0f}, textureIndex},
-    };
-    memcpy(s_GlobalVertices+s_GlobalVertexCount, vertices, sizeof(vertex) * 4);
-    s_GlobalVertexCount += 4;
-
-
-    U32 indexCount = 6;
-    U32 indices[] = {s_GlobalIndexOffset, s_GlobalIndexOffset+1, s_GlobalIndexOffset+2, s_GlobalIndexOffset+2, s_GlobalIndexOffset+3, s_GlobalIndexOffset};
-    s_GlobalIndexOffset += 4;
-    memcpy(s_GlobalIndices+s_GlobalIndexCount, indices, sizeof(U32) * indexCount);
-    s_GlobalIndexCount += indexCount;
-
-    printf("Vertices: %zi/%zi\n", s_GlobalVertexCount, s_GlobalVertexSize);
-    printf("Indices: %zi/%zi\n", s_GlobalIndexCount, s_GlobalIndexSize);
-    s_GlobalVerticesChanged = true;
-    s_GlobalIndicesChanged = true;
-    return vertices;
-}
-
-vertex* AcquireVertices() { return s_GlobalVertices; }
-U32* AcquireIndices(size_t* indexCount) { *indexCount = s_GlobalIndexCount; return s_GlobalIndices; }
-Buffer RequestBufferFromGlobalVertices()
-{
-    s_GlobalVerticesChanged = false;
-    return RequestBufferToGPU(sizeof(vertex) * s_GlobalVertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, s_GlobalVertices);
-}
-Buffer RequestBufferFromGlobalIndices()
-{
-    s_GlobalIndicesChanged = false;
-    return RequestBufferToGPU(sizeof(U32) * s_GlobalIndexCount, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, s_GlobalIndices);
-}
-*/
-
-
-
+#define PLCORE_REFLECTION
 #include "Abstraction/PlutoniumCore/PlutoniumCore.h"
 
 typedef struct {
@@ -99,8 +24,21 @@ int main() {
     PLCore_Renderer Renderer = PLCore_CreateRenderer(RenderInstance, Window);
 
 
-    PLCore_ShaderModule vShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\v.spv", "main");
-    PLCore_ShaderModule fShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\f.spv", "main");
+    PLCore_ShaderModule vShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\v.spv", VK_SHADER_STAGE_VERTEX_BIT, "main");
+    PLCore_ShaderModule fShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\f.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "main");
+
+
+    uint32_t refSetCount[2] = {0, 0};
+    SpvReflectDescriptorSet** refSets[] =
+            {
+                PLCore_ShaderReflectDescriptorSets(vShader, &refSetCount[0]),
+                PLCore_ShaderReflectDescriptorSets(fShader, &refSetCount[1]),
+            };
+    for (int i = 0; i < 2; i++)
+        PLCore_Priv_PrintReflectionDescriptorSets(refSets[i], refSetCount[i]);
+
+
+
 
 
 
@@ -135,19 +73,37 @@ int main() {
     PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
     PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[1], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers[1].bufferInfo, VK_NULL_HANDLE);
 
-    PLCore_DescriptorPool imagePool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
+
+/*
+    VkDescriptorType types[] = {VK_DESCRIPTOR_TYPE_SAMPLER, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE};
+    VkShaderStageFlagBits stages[] = {VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
+    uint32_t maxAllocations[2] = {1, 1};
+    PLCore_DescriptorPoolAllocator allocator = PLCore_CreateDescriptorPoolAllocator(2, types, stages, maxAllocations);
+
+
+    PLCore_DescriptorPool imagePool = PLCore_CreateDescriptprPoolFromAllocator(RenderInstance, allocator);
     PLCore_Descriptor imageSet = PLCore_CreateDescriptorFromPool(RenderInstance, &imagePool, 1, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 
     VkSampler sampler = PLCore_CreateSampler(RenderInstance.pl_device.device, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-    PLCore_Texture texture = PLCore_CreateTexture(RenderInstance, Renderer, imageSet.sets[0], 0, "D:\\Plutonium\\circ.png");
 
-    VkDescriptorImageInfo imageInfo = {
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .imageView = texture.image.view,
-            .sampler = sampler,
+    PLCore_Texture texture = PLCore_CreateTexture(RenderInstance, Renderer, imageSet.sets[0], "D:\\Plutonium\\circ.png");
+
+
+    VkDescriptorImageInfo imageInfo[2] = {
+            {
+                    .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .imageView = VK_NULL_HANDLE,
+                    .sampler = sampler,
+            },
+            {
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .imageView = texture.image.view,
+                .sampler = VK_NULL_HANDLE,
+            }
     };
-    PLCore_UpdateDescriptor(RenderInstance, imageSet.sets[0], VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, VK_NULL_HANDLE, &imageInfo);
-
+    PLCore_UpdateDescriptor(RenderInstance, imageSet.sets[0], VK_DESCRIPTOR_TYPE_SAMPLER, 0, VK_NULL_HANDLE, &imageInfo[0]);
+    PLCore_UpdateDescriptor(RenderInstance, imageSet.sets[0], VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_NULL_HANDLE, &imageInfo[1]);
+*/
     VkVertexInputAttributeDescription attribs[] = {
             {
                 .binding = 0,
@@ -177,11 +133,20 @@ int main() {
     };
     VkPipelineVertexInputStateCreateInfo vertexInput = PLCore_Priv_CreateVertexInput(3, attribs, 1, bindings);
 
+    /*
+    uint32_t descriptorLayouts = 1;
     VkDescriptorSetLayout layouts[] = {
             uniformSets.layouts[0],
-            imageSet.layouts[0]
+            //imageSet.layouts[0]
     };
-    VkPipelineLayout pipelineLayout = PLCore_Priv_CreatePipelineLayout(RenderInstance.pl_device.device, 0, VK_NULL_HANDLE, 2, layouts);
+    */
+    //VkPipelineLayout pipelineLayout = PLCore_Priv_CreatePipelineLayout(RenderInstance.pl_device.device, 0, VK_NULL_HANDLE, descriptorLayouts, layouts);
+    PLCore_ShaderModule shaderMods[] = {
+            vShader, fShader
+    };
+    uint32_t descriptorLayouts = 1;
+    VkDescriptorSetLayout* layouts;
+    VkPipelineLayout pipelineLayout = PLCore_CreatePipelineLayoutFromShader(RenderInstance, shaderMods, 2, &layouts, &descriptorLayouts);
 
     PLCore_GraphicsPipeline Pipeline = PLCore_CreatePipeline(RenderInstance, Renderer, vertexInput, vShader, fShader, &pipelineLayout);
 
@@ -232,11 +197,12 @@ int main() {
 
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
 
+        uint32_t descriptorSetCount = 1;
         VkDescriptorSet sets[] = {
                 uniformSets.sets[Renderer.priv_activeFrame],
-                imageSet.sets[0],
+                //imageSet.sets[0],
         };
-        vkCmdBindDescriptorSets(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.layout, 0, 2, sets, 0, VK_NULL_HANDLE);
+        vkCmdBindDescriptorSets(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.layout, 0, descriptorSetCount, sets, 0, VK_NULL_HANDLE);
 
         vkCmdBindPipeline(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.pipeline);
         VkDeviceSize offsets[] = {0};
