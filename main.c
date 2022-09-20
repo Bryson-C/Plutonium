@@ -30,10 +30,23 @@ int main() {
     uint32_t vShaderDescriptorCount = 0;
     SpvReflectDescriptorSet** vShaderDescriptors = PLCore_ShaderReflectDescriptorSets(vShader, &vShaderDescriptorCount);
     PLCore_Priv_PrintReflectionDescriptorSets(vShaderDescriptors, vShaderDescriptorCount);
-    
+
     uint32_t fShaderDescriptorCount = 0;
     SpvReflectDescriptorSet** fShaderDescriptors = PLCore_ShaderReflectDescriptorSets(fShader, &fShaderDescriptorCount);
     PLCore_Priv_PrintReflectionDescriptorSets(fShaderDescriptors, fShaderDescriptorCount);
+
+    VkDescriptorType type = 0;
+    PLCore_Descriptor descriptorSets;
+    descriptorSets.sets = malloc(sizeof(VkDescriptorSet) * fShaderDescriptorCount);
+    descriptorSets.layouts = malloc(sizeof(VkDescriptorSetLayout) * fShaderDescriptorCount);
+    descriptorSets.count = fShaderDescriptorCount;
+
+    for (int i = 0; i < fShaderDescriptorCount; i++) {
+        for (int j = 0; j < fShaderDescriptors[i]->binding_count; j++) {
+            type |= (VkDescriptorType)fShaderDescriptors[i]->bindings[j]->descriptor_type;
+        }
+    }
+
 
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
