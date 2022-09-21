@@ -1339,7 +1339,7 @@ VkDescriptorPoolSize PLCore_Priv_CreateDescritorPoolSize (VkDescriptorType type,
         .descriptorCount = descriptorCount,
     };
 }
-VkDescriptorPool PLCore_Priv_CreateDescriptorPool (VkDevice device, uint32_t sets, VkDescriptorType type, uint32_t poolSizeCount, VkDescriptorPoolSize* sizes) {
+VkDescriptorPool PLCore_Priv_CreateDescriptorPool (VkDevice device, uint32_t sets, uint32_t poolSizeCount, VkDescriptorPoolSize* sizes) {
     VkDescriptorPool pool;
 
     VkDescriptorPoolCreateInfo poolInfo;
@@ -1414,23 +1414,17 @@ PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t typ
     return allocator;
 }
 PLCore_DescriptorPool PLCore_CreateDescriptprPoolFromAllocator(PLCore_RenderInstance instance, PLCore_DescriptorPoolAllocator allocator) {
-    VkDescriptorType types = 0;
-
-    // TODO: Suspected Faulty Code
-    for (uint32_t i = 0; i < allocator.poolSizeCount; i++) {
-        types = types + allocator.types[i];
-    }
     return (PLCore_DescriptorPool) {
-        .pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, allocator.totalAllocations, types, allocator.poolSizeCount, allocator.sizes),
+        .pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, allocator.totalAllocations, allocator.poolSizeCount, allocator.sizes),
         .maxAllocations = allocator.totalAllocations,
         .currentAllocations = 0,
-        .type = types,
+        .type = 0,
     };
 }
 PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance, VkDescriptorType type, uint32_t maxDescriptorAllocations) {
     VkDescriptorPoolSize poolSize = PLCore_Priv_CreateDescritorPoolSize(type, maxDescriptorAllocations);
     PLCore_DescriptorPool pool = {
-            .pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, maxDescriptorAllocations, type, 1, &poolSize),
+            .pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, maxDescriptorAllocations, 1, &poolSize),
             .maxAllocations = maxDescriptorAllocations,
             .currentAllocations = 0,
             .type = type,
@@ -1583,7 +1577,7 @@ void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, ui
     };
     vkQueueSubmit(submitQueue, 1, &submitInfo, VK_NULL_HANDLE);
 }
-PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkDescriptorSet set, const char* path) {
+PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, const char* path) {
     int32_t width, height, channels;
     void* pixels = stbi_load(path, &width, &height, &channels, STBI_rgb_alpha);
     if (pixels == VK_NULL_HANDLE) fprintf(stderr, "%s", "big sad: loading images\n");
@@ -1612,10 +1606,6 @@ PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Rende
 
     PLCore_Texture texture;
     texture.image = textureImage;
-    texture.set = set;
-    texture.index = -1; //Because We Dont Know/Need An Index Currently
-
-
 
     vkDestroyBuffer(instance.pl_device.device, stagingBuffer.buffer, VK_NULL_HANDLE);
 

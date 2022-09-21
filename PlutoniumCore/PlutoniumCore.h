@@ -157,8 +157,6 @@ typedef struct {
 } PLCore_Buffer;
 typedef struct {
     PLCore_Image image;
-    VkDescriptorSet set;
-    int32_t index;
 } PLCore_Texture;
 typedef struct {
     VkDescriptorPoolSize* sizes;
@@ -282,7 +280,7 @@ void                        PLCore_MoveDynamicBufferVerticesTo(PLCore_DynamicVer
 VkDescriptorSetLayoutBinding PLCore_Priv_CreateDescriptorLayoutBinding(uint32_t slot, VkDescriptorType type, uint32_t descriptorCount, VkShaderStageFlagBits stages);
 VkDescriptorSetLayout PLCore_Priv_CreateDescriptorLayout(VkDevice device, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings);
 VkDescriptorPoolSize PLCore_Priv_CreateDescritorPoolSize(VkDescriptorType type, uint32_t descriptorCount);
-VkDescriptorPool PLCore_Priv_CreateDescriptorPool(VkDevice device, uint32_t sets, VkDescriptorType type, uint32_t poolSizeCount, VkDescriptorPoolSize* sizes);
+VkDescriptorPool PLCore_Priv_CreateDescriptorPool(VkDevice device, uint32_t sets, uint32_t poolSizeCount, VkDescriptorPoolSize* sizes);
 VkDescriptorSet* PLCore_Priv_CreateDescriptorSets(VkDevice device, uint32_t count, VkDescriptorType type, VkDescriptorSetLayout layout, VkDescriptorPool pool);
 void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
 
@@ -299,7 +297,7 @@ void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set
 PLCore_Image PLCore_CreateImage(VkDevice device, VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlagBits usage, uint32_t queueFamilyIndex, VkPhysicalDeviceMemoryProperties memoryProperties);
 void PLCore_DestroyImage(VkDevice device, PLCore_Image image);
 void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, uint32_t queueFamily, VkExtent3D extent, VkCommandBuffer commandBuffer, VkQueue submitQueue);
-PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkDescriptorSet set, const char* path);
+PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, const char* path);
 VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode);
 
 

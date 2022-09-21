@@ -27,26 +27,6 @@ int main() {
     PLCore_ShaderModule vShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\v.spv", VK_SHADER_STAGE_VERTEX_BIT, "main");
     PLCore_ShaderModule fShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\f.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "main");
 
-    uint32_t vShaderDescriptorCount = 0;
-    SpvReflectDescriptorSet** vShaderDescriptors = PLCore_ShaderReflectDescriptorSets(vShader, &vShaderDescriptorCount);
-    PLCore_Priv_PrintReflectionDescriptorSets(vShaderDescriptors, vShaderDescriptorCount);
-
-    uint32_t fShaderDescriptorCount = 0;
-    SpvReflectDescriptorSet** fShaderDescriptors = PLCore_ShaderReflectDescriptorSets(fShader, &fShaderDescriptorCount);
-    PLCore_Priv_PrintReflectionDescriptorSets(fShaderDescriptors, fShaderDescriptorCount);
-
-    VkDescriptorType type = 0;
-    PLCore_Descriptor descriptorSets;
-    descriptorSets.sets = malloc(sizeof(VkDescriptorSet) * fShaderDescriptorCount);
-    descriptorSets.layouts = malloc(sizeof(VkDescriptorSetLayout) * fShaderDescriptorCount);
-    descriptorSets.count = fShaderDescriptorCount;
-
-    for (int i = 0; i < fShaderDescriptorCount; i++) {
-        for (int j = 0; j < fShaderDescriptors[i]->binding_count; j++) {
-            type |= (VkDescriptorType)fShaderDescriptors[i]->bindings[j]->descriptor_type;
-        }
-    }
-
 
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
@@ -82,36 +62,8 @@ int main() {
     PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[1], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers[1].bufferInfo, VK_NULL_HANDLE);
 
 
-/*
-    VkDescriptorType types[] = {VK_DESCRIPTOR_TYPE_SAMPLER, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE};
-    VkShaderStageFlagBits stages[] = {VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_FRAGMENT_BIT};
-    uint32_t maxAllocations[2] = {1, 1};
-    PLCore_DescriptorPoolAllocator allocator = PLCore_CreateDescriptorPoolAllocator(2, types, stages, maxAllocations);
 
 
-    PLCore_DescriptorPool imagePool = PLCore_CreateDescriptprPoolFromAllocator(RenderInstance, allocator);
-    PLCore_Descriptor imageSet = PLCore_CreateDescriptorFromPool(RenderInstance, &imagePool, 1, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-
-    VkSampler sampler = PLCore_CreateSampler(RenderInstance.pl_device.device, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
-
-    PLCore_Texture texture = PLCore_CreateTexture(RenderInstance, Renderer, imageSet.sets[0], "D:\\Plutonium\\circ.png");
-
-
-    VkDescriptorImageInfo imageInfo[2] = {
-            {
-                    .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .imageView = VK_NULL_HANDLE,
-                    .sampler = sampler,
-            },
-            {
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .imageView = texture.image.view,
-                .sampler = VK_NULL_HANDLE,
-            }
-    };
-    PLCore_UpdateDescriptor(RenderInstance, imageSet.sets[0], VK_DESCRIPTOR_TYPE_SAMPLER, 0, VK_NULL_HANDLE, &imageInfo[0]);
-    PLCore_UpdateDescriptor(RenderInstance, imageSet.sets[0], VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_NULL_HANDLE, &imageInfo[1]);
-*/
     VkVertexInputAttributeDescription attribs[] = {
             {
                 .binding = 0,
@@ -142,10 +94,32 @@ int main() {
     VkPipelineVertexInputStateCreateInfo vertexInput = PLCore_Priv_CreateVertexInput(3, attribs, 1, bindings);
 
 
-    uint32_t descriptorLayouts = 1;
+    PLCore_DescriptorPool samplerPool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_SAMPLER, 1);
+    PLCore_Descriptor samplerSets = PLCore_CreateDescriptorFromPool(RenderInstance, &samplerPool, 1, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+    VkSampler sampler = PLCore_CreateSampler(RenderInstance.pl_device.device, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
+    VkDescriptorImageInfo samplerInfo = {
+            .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .imageView = VK_NULL_HANDLE,
+            .sampler = sampler,
+    };
+    PLCore_UpdateDescriptor(RenderInstance, samplerSets.sets[0], VK_DESCRIPTOR_TYPE_SAMPLER, 0, VK_NULL_HANDLE, &samplerInfo);
+
+    const uint32_t MAX_BOUND_IMAGES = 1;
+    PLCore_DescriptorPool imagePool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_BOUND_IMAGES);
+    PLCore_Descriptor imageSets = PLCore_CreateDescriptorFromPool(RenderInstance, &imagePool, 1, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+    PLCore_Texture texture = PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\circ.png");
+    VkDescriptorImageInfo imageInfo = {
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .imageView = texture.image.view,
+            .sampler = VK_NULL_HANDLE,
+    };
+    PLCore_UpdateDescriptor(RenderInstance, imageSets.sets[0], VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 0, VK_NULL_HANDLE, &imageInfo);
+
+    uint32_t descriptorLayouts = 3;
     VkDescriptorSetLayout layouts[] = {
             uniformSets.layouts[0],
-            //imageSet.layouts[0]
+            samplerSets.layouts[0],
+            imageSets.layouts[0]
     };
 
     VkPipelineLayout pipelineLayout = PLCore_Priv_CreatePipelineLayout(RenderInstance.pl_device.device, 0, VK_NULL_HANDLE, descriptorLayouts, layouts);
@@ -198,10 +172,11 @@ int main() {
 
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
 
-        uint32_t descriptorSetCount = 1;
+        uint32_t descriptorSetCount = 3;
         VkDescriptorSet sets[] = {
                 uniformSets.sets[Renderer.priv_activeFrame],
-                //imageSet.sets[0],
+                samplerSets.sets[0],
+                imageSets.sets[0],
         };
         vkCmdBindDescriptorSets(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.layout, 0, descriptorSetCount, sets, 0, VK_NULL_HANDLE);
 
