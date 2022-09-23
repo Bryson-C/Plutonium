@@ -31,10 +31,15 @@ int main() {
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
     PLCore_Vertex vertices[] = {
-            {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-            {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-            {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-            {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 3},
+            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 3},
+            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 3},
+            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 3},
+
+            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 2},
+            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 2},
+            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 2},
+            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 2},
     };
     uint32_t indices[] = {
             0, 1, 2, 2, 3, 0
@@ -42,7 +47,7 @@ int main() {
     PLCore_Buffer indexBuffer = PLCore_CreateGPUBuffer(RenderInstance, sizeof(uint32_t) * 6, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices);
 
     PLCore_DynamicVertexBuffer dynVertexBuffer = PLCore_CreateDynamicVertexBuffer();
-    PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 4, vertices);
+    PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 8, vertices);
     PLCore_Buffer vertexBuffer = PLCore_RequestDynamicVertexBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_Vertex));
 
 
@@ -82,6 +87,12 @@ int main() {
                 .format = VK_FORMAT_R32G32_SFLOAT,
                 .offset = offsetof(PLCore_Vertex, texPos),
                 .location = 2,
+            },
+            {
+                .binding = 0,
+                .format = VK_FORMAT_R32_UINT,
+                .offset = offsetof(PLCore_Vertex, texId),
+                .location = 3,
             }
     };
     VkVertexInputBindingDescription bindings[] = {
@@ -94,8 +105,8 @@ int main() {
     VkPipelineVertexInputStateCreateInfo vertexInput = PLCore_Priv_CreateVertexInput(3, attribs, 1, bindings);
 
 
-    PLCore_DescriptorPool samplerPool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_SAMPLER, 1);
-    PLCore_Descriptor samplerSets = PLCore_CreateDescriptorFromPool(RenderInstance, &samplerPool, 1, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+    PLCore_DescriptorPool samplerPool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_SAMPLER, 2);
+    PLCore_Descriptor samplerSets = PLCore_CreateDescriptorFromPool(RenderInstance, &samplerPool, 2, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
     VkSampler sampler = PLCore_CreateSampler(RenderInstance.pl_device.device, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
     VkDescriptorImageInfo samplerInfo = {
             .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -103,17 +114,41 @@ int main() {
             .sampler = sampler,
     };
     PLCore_UpdateDescriptor(RenderInstance, samplerSets.sets[0], VK_DESCRIPTOR_TYPE_SAMPLER, 0, VK_NULL_HANDLE, &samplerInfo);
+    PLCore_UpdateDescriptor(RenderInstance, samplerSets.sets[1], VK_DESCRIPTOR_TYPE_SAMPLER, 0, VK_NULL_HANDLE, &samplerInfo);
 
-    const uint32_t MAX_BOUND_IMAGES = 1;
+    const uint32_t MAX_BOUND_IMAGES = 8;
     PLCore_DescriptorPool imagePool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_BOUND_IMAGES);
-    PLCore_Descriptor imageSets = PLCore_CreateDescriptorFromPool(RenderInstance, &imagePool, 1, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-    PLCore_Texture texture = PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\circ.png");
-    VkDescriptorImageInfo imageInfo = {
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .imageView = texture.image.view,
-            .sampler = VK_NULL_HANDLE,
+    PLCore_Descriptor imageSets = PLCore_CreateDescriptorFromPool(RenderInstance, &imagePool, 1, 0, 8, VK_SHADER_STAGE_FRAGMENT_BIT);
+    PLCore_Texture textures[] = {
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\circ.png"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\ps5.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
     };
-    PLCore_UpdateDescriptor(RenderInstance, imageSets.sets[0], VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 0, VK_NULL_HANDLE, &imageInfo);
+    VkDescriptorImageInfo imageInfos[8];
+    for (int32_t i = 0; i < MAX_BOUND_IMAGES; i++) {
+        imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfos[i].imageView = textures[i].image.view;
+        imageInfos[i].sampler = VK_NULL_HANDLE;
+    }
+    VkWriteDescriptorSet write = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = VK_NULL_HANDLE,
+            .dstSet = imageSets.sets[0],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = MAX_BOUND_IMAGES,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+            .pImageInfo = imageInfos,
+            .pBufferInfo = VK_NULL_HANDLE,
+            .pTexelBufferView = VK_NULL_HANDLE,
+    };
+    vkUpdateDescriptorSets(RenderInstance.pl_device.device, 1, &write, 0, VK_NULL_HANDLE);
+
 
     uint32_t descriptorLayouts = 3;
     VkDescriptorSetLayout layouts[] = {
@@ -127,7 +162,6 @@ int main() {
 
     uint32_t fps = 0;
     clock_t timer = clock();
-    clock_t buttonCooldown = clock();
 
     float xPos = 0.0f, yPos = 0.0f;
     clock_t moveTimerX = clock(), moveTimerY = clock();
@@ -167,7 +201,8 @@ int main() {
         data.y = yPos;
         PLCore_UploadDataToBuffer(RenderInstance.pl_device.device, &uniformBuffers[Renderer.priv_activeFrame].memory, sizeof(UNIFORM), &data);
 
-
+        double cursorPosX, cursorPosY;
+        glfwGetCursorPos(Window.window, &cursorPosX, &cursorPosY);
 
 
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
@@ -175,7 +210,7 @@ int main() {
         uint32_t descriptorSetCount = 3;
         VkDescriptorSet sets[] = {
                 uniformSets.sets[Renderer.priv_activeFrame],
-                samplerSets.sets[0],
+                samplerSets.sets[Renderer.priv_activeFrame],
                 imageSets.sets[0],
         };
         vkCmdBindDescriptorSets(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.layout, 0, descriptorSetCount, sets, 0, VK_NULL_HANDLE);

@@ -257,6 +257,7 @@ typedef struct {
     float xyz[3];
     float rgb[3];
     float texPos[2];
+    uint32_t texId;
 } PLCore_Vertex;
 
 
