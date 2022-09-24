@@ -31,20 +31,21 @@ int main() {
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
     PLCore_Vertex vertices[] = {
-            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 3},
-            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 3},
-            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 3},
-            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 3},
+            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 0},
+            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 0},
+            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 0},
+            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 0},
 
-            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 2},
-            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 2},
-            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 2},
-            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 2},
+            {{-0.5f + 0.1f, -0.5f + 0.1f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 2},
+            {{0.5f + 0.1f, -0.5f + 0.1f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 2},
+            {{0.5f + 0.1f, 0.5f + 0.1f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 2},
+            {{-0.5f + 0.1f, 0.5f + 0.1f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 2},
     };
     uint32_t indices[] = {
-            0, 1, 2, 2, 3, 0
+            0, 1, 2, 2, 3, 0,
+            4, 5, 6, 6, 7, 4
     };
-    PLCore_Buffer indexBuffer = PLCore_CreateGPUBuffer(RenderInstance, sizeof(uint32_t) * 6, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices);
+    PLCore_Buffer indexBuffer = PLCore_CreateGPUBuffer(RenderInstance, sizeof(uint32_t) * 12, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices);
 
     PLCore_DynamicVertexBuffer dynVertexBuffer = PLCore_CreateDynamicVertexBuffer();
     PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 8, vertices);
@@ -102,7 +103,7 @@ int main() {
                 .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
             }
     };
-    VkPipelineVertexInputStateCreateInfo vertexInput = PLCore_Priv_CreateVertexInput(3, attribs, 1, bindings);
+    VkPipelineVertexInputStateCreateInfo vertexInput = PLCore_Priv_CreateVertexInput(4, attribs, 1, bindings);
 
 
     PLCore_DescriptorPool samplerPool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_SAMPLER, 2);
@@ -220,7 +221,7 @@ int main() {
         vkCmdBindVertexBuffers(activeBuffer, 0, 1, &vertexBuffer.buffer, offsets);
         vkCmdBindIndexBuffer(activeBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-        vkCmdDrawIndexed(activeBuffer, 6, 1, 0, 0, 0);
+        vkCmdDrawIndexed(activeBuffer, 12, 1, 0, 0, 0);
 
 
         PLCore_EndFrame(RenderInstance, &Renderer, &Pipeline, &Window);
