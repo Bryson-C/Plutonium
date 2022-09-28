@@ -209,24 +209,10 @@ int main() {
         PLCore_BeginFrame(RenderInstance, &Renderer, &Pipeline, &Window);
 
         UNIFORM data;
-        data.model = (mat4s){
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 1.0f
-        };
-        data.view = (mat4s){
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 1.0f
-        };
-        data.proj = (mat4s){
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 1.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 1.0f
-        };
+        data.model = glms_mat4_identity();
+        data.view = glms_mat4_identity();
+        data.proj = glms_mat4_identity();
+        
         data.model = glms_translate(data.model, (vec3s){1.0f * xPos, 1.0f * yPos, 1.0f});
         data.view = glms_lookat((vec3s){2.0f, (mousePos[0] * 5), (mousePos[1] * 5)}, (vec3s){0.0f, 0.0f, 0.0f}, (vec3s){0.0f, 0.0f, 1.0f});
         data.proj = glms_perspective(glm_rad(45.0f), (float)Window.resolution.width / (float)Window.resolution.height, 0.1f, 10.0f);
