@@ -5,6 +5,9 @@
 #include <time.h>
 #include <math.h>
 
+#include <cglm/cglm.h>
+#include <cglm/struct.h>
+
 #define STB_IMAGE_IMPLEMENTATION 1
 #include "lib/stb_image.h"
 
@@ -12,8 +15,7 @@
 #include "Abstraction/PlutoniumCore/PlutoniumCore.h"
 
 typedef struct {
-    float x;
-    float y;
+    mat4s model, view, proj;
 } UNIFORM;
 
 
@@ -31,10 +33,10 @@ int main() {
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
     PLCore_Vertex vertices[] = {
-            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 0},
-            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 0},
-            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 0},
-            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 0},
+            {{-0.5f, -0.5f, 1.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 0},
+            {{0.5f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 0},
+            {{0.5f, 0.5f, 1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 0},
+            {{-0.5f, 0.5f, 1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 0},
 
             {{-0.5f + 0.1f, -0.5f + 0.1f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 2},
             {{0.5f + 0.1f, -0.5f + 0.1f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 2},
@@ -130,6 +132,7 @@ int main() {
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
     };
+
     VkDescriptorImageInfo imageInfos[8];
     for (int32_t i = 0; i < MAX_BOUND_IMAGES; i++) {
         imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -165,29 +168,37 @@ int main() {
     clock_t timer = clock();
 
     float xPos = 0.0f, yPos = 0.0f;
+    uint32_t moveTime = 25;
+    float movePowerX = 0.025f, movePowerY = 0.025f;
     clock_t moveTimerX = clock(), moveTimerY = clock();
 
+    double mousePos[2];
+
     while(!glfwWindowShouldClose(Window.window)) {
+        glfwGetCursorPos(Window.window, &mousePos[0], &mousePos[1]);
+        mousePos[0] /= (float)Window.resolution.width;
+        mousePos[1] /= (float)Window.resolution.height;
+
         // If The Vertex Data Has Been Updated
         if (dynVertexBuffer.dataChanged == 1) {
             vertexBuffer = PLCore_RequestDynamicVertexBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_Vertex));
         }
 
-        if (glfwGetKey(Window.window, GLFW_KEY_A) && clock() - moveTimerX > 25) {
+        if (glfwGetKey(Window.window, GLFW_KEY_A) && clock() - moveTimerX > moveTime) {
             moveTimerX = clock();
-            xPos += 0.025f;
+            xPos += movePowerX;
         }
-        if (glfwGetKey(Window.window, GLFW_KEY_D) && clock() - moveTimerX > 25) {
+        if (glfwGetKey(Window.window, GLFW_KEY_D) && clock() - moveTimerX > moveTime) {
             moveTimerX =  clock();
-            xPos -= 0.025f;
+            xPos -= movePowerX;
         }
-        if (glfwGetKey(Window.window, GLFW_KEY_W) && clock() - moveTimerY > 25) {
+        if (glfwGetKey(Window.window, GLFW_KEY_W) && clock() - moveTimerY > moveTime) {
             moveTimerY =  clock();
-            yPos += 0.025f;
+            yPos += movePowerY;
         }
-        if (glfwGetKey(Window.window, GLFW_KEY_S) && clock() - moveTimerY > 25) {
+        if (glfwGetKey(Window.window, GLFW_KEY_S) && clock() - moveTimerY > moveTime) {
             moveTimerY =  clock();
-            yPos -= 0.025f;
+            yPos -= movePowerY;
         }
 
 
@@ -198,13 +209,32 @@ int main() {
         PLCore_BeginFrame(RenderInstance, &Renderer, &Pipeline, &Window);
 
         UNIFORM data;
-        data.x = xPos;
-        data.y = yPos;
+        data.model = (mat4s){
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f
+        };
+        data.view = (mat4s){
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f
+        };
+        data.proj = (mat4s){
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f
+        };
+        data.model = glms_translate(data.model, (vec3s){1.0f * xPos, 1.0f * yPos, 1.0f});
+        data.view = glms_lookat((vec3s){2.0f, (mousePos[0] * 5), (mousePos[1] * 5)}, (vec3s){0.0f, 0.0f, 0.0f}, (vec3s){0.0f, 0.0f, 1.0f});
+        data.proj = glms_perspective(glm_rad(45.0f), (float)Window.resolution.width / (float)Window.resolution.height, 0.1f, 10.0f);
+        data.proj.raw[0][1] *= -1;
+        //data.model = glms_translate(data.model, (vec3s){1.0f * xPos, 1.0f * yPos, 0.0f});
+        //data.model = glms_rotate(data.model, (float)(clock() % 5000) / 1000, (vec3s){0.0f, 1.0f, 1.0f});
+
         PLCore_UploadDataToBuffer(RenderInstance.pl_device.device, &uniformBuffers[Renderer.priv_activeFrame].memory, sizeof(UNIFORM), &data);
-
-        double cursorPosX, cursorPosY;
-        glfwGetCursorPos(Window.window, &cursorPosX, &cursorPosY);
-
 
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
 
