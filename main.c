@@ -231,8 +231,7 @@ int main() {
         data.view = glms_lookat((vec3s){2.0f, (mousePos[0] * 5), (mousePos[1] * 5)}, (vec3s){0.0f, 0.0f, 0.0f}, (vec3s){0.0f, 0.0f, 1.0f});
         data.proj = glms_perspective(glm_rad(45.0f), (float)Window.resolution.width / (float)Window.resolution.height, 0.1f, 10.0f);
         data.proj.raw[0][1] *= -1;
-        //data.model = glms_translate(data.model, (vec3s){1.0f * xPos, 1.0f * yPos, 0.0f});
-        //data.model = glms_rotate(data.model, (float)(clock() % 5000) / 1000, (vec3s){0.0f, 1.0f, 1.0f});
+
 
         PLCore_UploadDataToBuffer(RenderInstance.pl_device.device, &uniformBuffers[Renderer.priv_activeFrame].memory, sizeof(UNIFORM), &data);
 
