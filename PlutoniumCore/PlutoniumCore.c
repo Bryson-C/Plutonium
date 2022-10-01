@@ -1639,8 +1639,6 @@ PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Rende
     return texture;
 }
 
-
-
 VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode) {
     VkSampler sampler;
 
@@ -1670,6 +1668,66 @@ VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddres
     return sampler;
 }
 
+
+PLCore_CameraMoveScheme PLCore_GetDefaultMoveScheme() {
+    return (PLCore_CameraMoveScheme){
+            .buttonRight = GLFW_KEY_D,
+            .buttonLeft = GLFW_KEY_A,
+            .buttonForward = GLFW_KEY_W,
+            .buttonBackward = GLFW_KEY_S,
+            .buttonUp = GLFW_KEY_E,
+            .buttonDown = GLFW_KEY_Q,
+            .moveSpeedX = 0.25f,
+            .moveSpeedY = 0.25f,
+            .moveSpeedZ = 0.25f,
+            .moveTime = 25
+    };
+}
+
+PLCore_CameraUniform PLCore_CreateCameraUniform() {
+    PLCore_CameraUniform camera = {
+        .model = glms_mat4_identity(),
+        .view = glms_mat4_identity(),
+        .proj = glms_mat4_identity(),
+        .moveTimer = clock(),
+        .posX = 0.0f,
+        .posY = 0.0f,
+        .posZ = 0.0f,
+        .rotX = 0.0f,
+        .rotY = 0.0f,
+        .fov = 45,
+    };
+    return camera;
+}
+void PLCore_PollCameraMovements(PLCore_Window window, PLCore_CameraUniform* camera, PLCore_CameraMoveScheme scheme) {
+
+    double mousePos[2];
+    glfwGetCursorPos(window.window, &mousePos[0], &mousePos[1]);
+    mousePos[0] /= (float)window.resolution.width;
+    mousePos[1] /= (float)window.resolution.height;
+
+    (*camera).rotX = (((float)-mousePos[0] + 0.5f) * ((float)window.resolution.width * 0.001f)) * 1.4f;
+    (*camera).rotY = (((float)-mousePos[1] + 0.5f) * ((float)window.resolution.height * 0.001f)) * 5.4f;
+
+    if (clock() - camera->moveTimer > scheme.moveTime) {
+        if (glfwGetKey(window.window, scheme.buttonLeft)) { (*camera).posX += scheme.moveSpeedX; }
+        if (glfwGetKey(window.window, scheme.buttonRight)) { (*camera).posX -= scheme.moveSpeedX; }
+        if (glfwGetKey(window.window, scheme.buttonUp)) { (*camera).posY += scheme.moveSpeedY; }
+        if (glfwGetKey(window.window, scheme.buttonDown)) { (*camera).posY -= scheme.moveSpeedY; }
+        if (glfwGetKey(window.window, scheme.buttonForward)) { (*camera).posZ += scheme.moveSpeedZ; }
+        if (glfwGetKey(window.window, scheme.buttonBackward)) { (*camera).posZ -= scheme.moveSpeedZ; }
+        (*camera).moveTimer = clock();
+    }
+
+    (*camera).model = glms_translate(glms_mat4_identity(), (vec3s){camera->posX * scheme.moveSpeedX, camera->posY * scheme.moveSpeedY, camera->posZ * scheme.moveSpeedZ});
+    (*camera).view = glms_lookat((vec3s){
+                                           camera->rotX * 1.0f,
+                                           camera->rotY * 1.0f,
+                                           2.0f,
+                                   },
+                                   (vec3s){0.0f, 0.0f, 0.0f},(vec3s){0.0f,1.0f,0.0f});
+    (*camera).proj = glms_perspective(glm_rad(camera->fov), (float)window.resolution.width / (float)window.resolution.height, 0.1f, 10.0f);
+}
 
 
 #ifdef PLCORE_REFLECTION

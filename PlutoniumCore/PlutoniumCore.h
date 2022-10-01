@@ -11,11 +11,14 @@
 #include <stdlib.h>             // required: malloc, realloc, calloc
 #include <string.h>             // required: memcpy
 #include <assert.h>             // required: assert
+#include <time.h>               // required: clock(), clock_t
 
 #include <vulkan/vulkan.h>      // required: much functionality
 #include <glfw3.h>              // required: much functionality
 
-#define PLCORE_REFLECTION
+#include <cglm/cglm.h>          // required: matrix and vectorFunctionality
+#include <cglm/struct.h>        // required: extensions of base 'cglm/cglm.h' functionality
+
 
 #ifdef PLCORE_REFLECTION
     #include "SpirvReflection.h"
@@ -301,8 +304,23 @@ void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, ui
 PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, const char* path);
 VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode);
 
+typedef struct {
+    mat4s model, view, proj;
+    float posX, posY, posZ;
+    float rotX, rotY;
+    float fov;
+    clock_t moveTimer;
+} PLCore_CameraUniform;
+typedef struct {
+    int buttonRight, buttonLeft, buttonForward, buttonBackward, buttonUp, buttonDown;
+    float moveSpeedX, moveSpeedY, moveSpeedZ;
+    int moveTime;
+} PLCore_CameraMoveScheme;
+PLCore_CameraMoveScheme PLCore_GetDefaultMoveScheme();
 
+PLCore_CameraUniform PLCore_CreateCameraUniform();
 
+void PLCore_PollCameraMovements(PLCore_Window window, PLCore_CameraUniform* camera, PLCore_CameraMoveScheme scheme);
 
 
 

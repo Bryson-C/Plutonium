@@ -14,9 +14,7 @@
 #define PLCORE_REFLECTION
 #include "Abstraction/PlutoniumCore/PlutoniumCore.h"
 
-typedef struct {
-    mat4s model, view, proj;
-} UNIFORM;
+#define NEW_INDICES(i, vertspershape) 0 + (vertspershape * i), 1+ (vertspershape * i), 2+ (vertspershape * i), 2+ (vertspershape * i), 3+ (vertspershape * i), 0+ (vertspershape * i)
 
 
 int main() {
@@ -33,31 +31,50 @@ int main() {
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
     PLCore_Vertex vertices[] = {
-            {{-0.5f, -0.5f, 1.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 0},
-            {{0.5f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 0},
-            {{0.5f, 0.5f, 1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 0},
-            {{-0.5f, 0.5f, 1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 0},
+            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 3},
+            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 3},
+            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 3},
+            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 3},
 
-            {{-0.5f + 0.1f, -0.5f + 0.1f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 2},
-            {{0.5f + 0.1f, -0.5f + 0.1f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 2},
-            {{0.5f + 0.1f, 0.5f + 0.1f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 2},
-            {{-0.5f + 0.1f, 0.5f + 0.1f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 2},
+            {{-0.5f - 1.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 2},
+            {{0.5f - 1.0f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 2},
+            {{0.5f - 1.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 2},
+            {{-0.5f - 1.0f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 2},
+
+            {{-0.5f + 1.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 1},
+            {{0.5f + 1.0f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 1},
+            {{0.5f + 1.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 1},
+            {{-0.5f + 1.0f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 1},
+
+            {{-0.5f + 2.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 4},
+            {{0.5f + 2.0f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 4},
+            {{0.5f + 2.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 4},
+            {{-0.5f + 2.0f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 4},
+
+            {{-0.5f + 3.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 5},
+            {{0.5f + 3.0f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 5},
+            {{0.5f + 3.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 5},
+            {{-0.5f + 3.0f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 5},
     };
     uint32_t indices[] = {
             0, 1, 2, 2, 3, 0,
-            4, 5, 6, 6, 7, 4
+            NEW_INDICES(1, 4),
+            NEW_INDICES(2, 4),
+            NEW_INDICES(3, 4),
+            NEW_INDICES(4, 4),
+            //8, 9, 10, 10, 11, 8
     };
-    PLCore_Buffer indexBuffer = PLCore_CreateGPUBuffer(RenderInstance, sizeof(uint32_t) * 12, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices);
+    PLCore_Buffer indexBuffer = PLCore_CreateGPUBuffer(RenderInstance, sizeof(uint32_t) * (6 * 5), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices);
 
     PLCore_DynamicVertexBuffer dynVertexBuffer = PLCore_CreateDynamicVertexBuffer();
-    PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 8, vertices);
+    PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 4 * 5, vertices);
     PLCore_Buffer vertexBuffer = PLCore_RequestDynamicVertexBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_Vertex));
 
 
 
-    PLCore_Buffer uniformBuffers[2] = {
-            PLCore_CreateBuffer(RenderInstance, sizeof(UNIFORM), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT),
-            PLCore_CreateBuffer(RenderInstance, sizeof(UNIFORM), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT)
+    PLCore_Buffer cameraUniformBuffers[2] = {
+            PLCore_CreateBuffer(RenderInstance, sizeof(PLCore_CameraUniform), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT),
+            PLCore_CreateBuffer(RenderInstance, sizeof(PLCore_CameraUniform), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT)
     };
 
 
@@ -66,8 +83,8 @@ int main() {
     PLCore_DescriptorPool uniformPool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2);
     PLCore_Descriptor uniformSets = PLCore_CreateDescriptorFromPool(RenderInstance, &uniformPool, 2, 0, 1, VK_SHADER_STAGE_VERTEX_BIT);
 
-    PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
-    PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[1], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers[1].bufferInfo, VK_NULL_HANDLE);
+    PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
+    PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[1], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[1].bufferInfo, VK_NULL_HANDLE);
 
 
 
@@ -124,11 +141,11 @@ int main() {
     PLCore_Descriptor imageSets = PLCore_CreateDescriptorFromPool(RenderInstance, &imagePool, 1, 0, 8, VK_SHADER_STAGE_FRAGMENT_BIT);
     PLCore_Texture textures[] = {
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\circ.png"),
-            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\ps5.jpg"),
-            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
-            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
-            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
-            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\canyon.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\jordini.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\comreezy.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\can2.jpg"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\dave.jpg"),
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\texture.jpg"),
     };
@@ -167,28 +184,9 @@ int main() {
     uint32_t fps = 0;
     clock_t timer = clock();
 
-    float xPos = 0.0f,
-            yPos = 0.0f,
-            zPos = 0.0f,
-            movePowerX = 0.25f,
-            movePowerY = 0.25f,
-            movePowerZ = 0.25f;
-
-    uint32_t moveTime = 25;
-
-    clock_t moveTimerX = clock(),
-            moveTimerY = clock(),
-            moveTimerZ = clock();
-
-    float cameraRotX = 0.0f;
-    float cameraRotY = 0.0f;
-
-    double mousePos[2];
-
+    PLCore_CameraUniform camera = PLCore_CreateCameraUniform();
     while(!glfwWindowShouldClose(Window.window)) {
-        glfwGetCursorPos(Window.window, &mousePos[0], &mousePos[1]);
-        mousePos[0] /= (float)Window.resolution.width;
-        mousePos[1] /= (float)Window.resolution.height;
+
 
 
         // If The Vertex Data Has Been Updated
@@ -196,59 +194,12 @@ int main() {
             vertexBuffer = PLCore_RequestDynamicVertexBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_Vertex));
         }
 
-        if (glfwGetKey(Window.window, GLFW_KEY_A) && clock() - moveTimerX > moveTime) {
-            moveTimerX = clock();
-            xPos += movePowerX;
-        }
-        if (glfwGetKey(Window.window, GLFW_KEY_D) && clock() - moveTimerX > moveTime) {
-            moveTimerX = clock();
-            xPos -= movePowerX;
-        }
-        if (glfwGetKey(Window.window, GLFW_KEY_E) && clock() - moveTimerY > moveTime) {
-            moveTimerY = clock();
-            yPos += movePowerY;
-        }
-        if (glfwGetKey(Window.window, GLFW_KEY_Q) && clock() - moveTimerY > moveTime) {
-            moveTimerY = clock();
-            yPos -= movePowerY;
-        }
-        if (glfwGetKey(Window.window, GLFW_KEY_W) && clock() - moveTimerZ > moveTime) {
-            moveTimerZ = clock();
-            zPos += movePowerZ;
-        }
-        if (glfwGetKey(Window.window, GLFW_KEY_S) && clock() - moveTimerZ > moveTime) {
-            moveTimerZ = clock();
-            zPos -= movePowerZ;
-        }
-
-        mat4s projectionMat = glms_mat4_identity();
-        mat4s modelMat = glms_mat4_identity();
-        mat4s viewMat = glms_mat4_identity();
-
-        cameraRotX = ((float)-mousePos[0] + 0.5f) * ((float)Window.resolution.width * 0.001f);
-        cameraRotY = ((float)mousePos[1] - 0.5f) * ((float)Window.resolution.height * 0.001f);
-
-        modelMat = glms_translate(modelMat, (vec3s){xPos * movePowerX, yPos * movePowerY, zPos * movePowerZ});
-        viewMat = glms_lookat((vec3s){
-            cameraRotX * 1.0f,
-            cameraRotY * 1.0f,
-            2.0f,
-            },
-            (vec3s){0.0f, 0.0f, 0.0f},(vec3s){0.0f,1.0f,0.0f});
-        projectionMat = glms_perspective(glm_rad(45.0f), (float)Window.resolution.width / (float)Window.resolution.height, 0.1f, 10.0f);
-
-
-        UNIFORM data;
-        data.model = modelMat;
-        data.view = viewMat;
-        data.proj = projectionMat;
-        //data.proj.raw[0][1] *= -1;
-
-        PLCore_UploadDataToBuffer(RenderInstance.pl_device.device, &uniformBuffers[Renderer.priv_activeFrame].memory, sizeof(UNIFORM), &data);
-
-
-
+        PLCore_CameraMoveScheme scheme = PLCore_GetDefaultMoveScheme();
         glfwPollEvents();
+        PLCore_PollCameraMovements(Window, &camera, scheme);
+
+        PLCore_UploadDataToBuffer(RenderInstance.pl_device.device, &cameraUniformBuffers[Renderer.priv_activeFrame].memory, sizeof(PLCore_CameraUniform), &camera);
+
 
         PLCore_BeginFrame(RenderInstance, &Renderer, &Pipeline, &Window);
 
@@ -267,7 +218,7 @@ int main() {
         vkCmdBindVertexBuffers(activeBuffer, 0, 1, &vertexBuffer.buffer, offsets);
         vkCmdBindIndexBuffer(activeBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-        vkCmdDrawIndexed(activeBuffer, 12, 1, 0, 0, 0);
+        vkCmdDrawIndexed(activeBuffer, (6 * 5), 1, 0, 0, 0);
 
 
         PLCore_EndFrame(RenderInstance, &Renderer, &Pipeline, &Window);
