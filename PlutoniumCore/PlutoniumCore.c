@@ -328,6 +328,16 @@ VkCommandBuffer* PLCore_Priv_CreateCommandBuffers(VkDevice device, VkCommandPool
 }
 GLFWwindow* PLCore_Priv_CreateWindow(VkInstance instance, uint32_t width, uint32_t height, VkSurfaceKHR* surface) {
     GLFWwindow* window = glfwCreateWindow(width, height, "Application", VK_NULL_HANDLE, VK_NULL_HANDLE);
+
+    uint32_t monitorCount = 0;
+    GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
+    GLFWmonitor* monitor = (monitorCount > 0) ? monitors[0] : VK_NULL_HANDLE;
+
+    int32_t monitorWidth, monitorHeight;
+    glfwGetMonitorPhysicalSize(monitor, &monitorWidth, &monitorHeight);
+
+    glfwSetWindowPos(window, (monitorWidth/2) + (int_fast32_t)(width/2), (monitorHeight/2));
+
     glfwCreateWindowSurface(instance, window, VK_NULL_HANDLE, surface);
     return window;
 }
@@ -1143,8 +1153,14 @@ static void PLCore_DestroyRenderObjects(PLCore_RenderInstance instance, PLCore_R
     (*renderer).priv_activeFrame = 0;
 }
 static void PLCore_CreateRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_Window* window) {
+    int32_t width,height;
+    glfwGetWindowSize(window->window, &width, &height);
 
-    if (window->resolution.width <= 0 || window->resolution.height <= 0 ) glfwWaitEvents();
+    if (width <= 0 || height <= 0) printf("Pausing Execution Due To Invalid Window Resolution: %i, %i\n", width, height);
+    while (width <= 0 || height <= 0 ) {
+        glfwGetWindowSize(window->window, &width, &height);
+        glfwWaitEvents();
+    }
 
     PLCore_ResizeWindow(instance, window);
 
@@ -1185,10 +1201,8 @@ PLCore_Buffer PLCore_CreateGPUBuffer(PLCore_RenderInstance instance, VkDeviceSiz
 void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
     VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer->swapchain, UINT64_MAX, renderer->priv_waitSemaphores[renderer->priv_activeFrame], VK_NULL_HANDLE, &(*renderer).priv_imageIndex);
     if (imageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
+        printf("Out Of Date Render Objects!\n");
         PLCore_RecreateRenderObjects(instance, renderer, pipeline, window);
-        //fprintf(stderr, "Rendering Objects Need To Be Rebuilt\n");
-        //assert(1);
-        //return;
     }
 
     vkWaitForFences(instance.pl_device.device, 1, &renderer->priv_renderFences[renderer->priv_activeFrame], VK_TRUE, UINT64_MAX);
@@ -1239,10 +1253,8 @@ void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, 
 
     VkResult renderResult = vkQueuePresentKHR(instance.pl_device.graphicsQueue.queue, &presentInfo);
     if (renderResult == VK_ERROR_OUT_OF_DATE_KHR || renderResult == VK_SUBOPTIMAL_KHR) {
+        printf("Out Of Date Render Objects!\n");
         PLCore_RecreateRenderObjects(instance, renderer, pipeline, window);
-        //fprintf(stderr, "Rendering Objects Need To Be Rebuilt\n");
-        //assert(1);
-        //return;
     }
 
     renderer->priv_activeFrame = (renderer->priv_activeFrame+1)%renderer->backBuffers;
@@ -1512,7 +1524,7 @@ void PLCore_DestroyImage(VkDevice device, PLCore_Image image) {
     vkFreeMemory(device, image.memory, VK_NULL_HANDLE);
 }
 
-void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, uint32_t queueFamily, VkExtent3D extent, VkCommandBuffer commandBuffer, VkQueue submitQueue) {
+void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, uint32_t queueFamily, VkExtent3D extent, VkCommandBuffer commandBuffer, VkFence* waitFence, VkQueue submitQueue) {
     VkCommandBuffer cmd = commandBuffer;
 
     VkCommandBufferBeginInfo beginInfo;
@@ -1575,7 +1587,8 @@ void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, ui
             .signalSemaphoreCount = 0,
             .pSignalSemaphores = VK_NULL_HANDLE,
     };
-    vkQueueSubmit(submitQueue, 1, &submitInfo, VK_NULL_HANDLE);
+
+    vkQueueSubmit(submitQueue, 1, &submitInfo, *waitFence);
 }
 PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, const char* path) {
     int32_t width, height, channels;
@@ -1597,12 +1610,26 @@ PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Rende
     stbi_image_free(pixels);
 
     VkCommandBuffer* cmdBuffer = PLCore_Priv_CreateCommandBuffers(instance.pl_device.device, renderer.graphicsPool.pool, 1);
+
+    VkFenceCreateInfo fenceInfo = {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .pNext = VK_NULL_HANDLE,
+            .flags = 0,
+    };
+    VkFence fence;
+    vkCreateFence(instance.pl_device.device, &fenceInfo, VK_NULL_HANDLE, &fence);
+
+
     PLCore_TransitionTextureLayout(stagingBuffer,
                                    textureImage,
                                    instance.pl_device.graphicsQueue.familyIndex,
                                    imageExtent,
                                    *cmdBuffer,
+                                   &fence,
                                    instance.pl_device.graphicsQueue.queue);
+
+    vkWaitForFences(instance.pl_device.device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkFreeCommandBuffers(instance.pl_device.device, renderer.graphicsPool.pool, 1, cmdBuffer);
 
     PLCore_Texture texture;
     texture.image = textureImage;

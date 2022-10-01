@@ -167,10 +167,21 @@ int main() {
     uint32_t fps = 0;
     clock_t timer = clock();
 
-    float xPos = 0.0f, yPos = 0.0f;
+    float xPos = 0.0f,
+            yPos = 0.0f,
+            zPos = 0.0f,
+            movePowerX = 0.25f,
+            movePowerY = 0.25f,
+            movePowerZ = 0.25f;
+
     uint32_t moveTime = 25;
-    float movePowerX = 0.025f, movePowerY = 0.025f;
-    clock_t moveTimerX = clock(), moveTimerY = clock();
+
+    clock_t moveTimerX = clock(),
+            moveTimerY = clock(),
+            moveTimerZ = clock();
+
+    float cameraRotX = 0.0f;
+    float cameraRotY = 0.0f;
 
     double mousePos[2];
 
@@ -178,6 +189,7 @@ int main() {
         glfwGetCursorPos(Window.window, &mousePos[0], &mousePos[1]);
         mousePos[0] /= (float)Window.resolution.width;
         mousePos[1] /= (float)Window.resolution.height;
+
 
         // If The Vertex Data Has Been Updated
         if (dynVertexBuffer.dataChanged == 1) {
@@ -189,37 +201,56 @@ int main() {
             xPos += movePowerX;
         }
         if (glfwGetKey(Window.window, GLFW_KEY_D) && clock() - moveTimerX > moveTime) {
-            moveTimerX =  clock();
+            moveTimerX = clock();
             xPos -= movePowerX;
         }
-        if (glfwGetKey(Window.window, GLFW_KEY_W) && clock() - moveTimerY > moveTime) {
-            moveTimerY =  clock();
+        if (glfwGetKey(Window.window, GLFW_KEY_E) && clock() - moveTimerY > moveTime) {
+            moveTimerY = clock();
             yPos += movePowerY;
         }
-        if (glfwGetKey(Window.window, GLFW_KEY_S) && clock() - moveTimerY > moveTime) {
-            moveTimerY =  clock();
+        if (glfwGetKey(Window.window, GLFW_KEY_Q) && clock() - moveTimerY > moveTime) {
+            moveTimerY = clock();
             yPos -= movePowerY;
         }
+        if (glfwGetKey(Window.window, GLFW_KEY_W) && clock() - moveTimerZ > moveTime) {
+            moveTimerZ = clock();
+            zPos += movePowerZ;
+        }
+        if (glfwGetKey(Window.window, GLFW_KEY_S) && clock() - moveTimerZ > moveTime) {
+            moveTimerZ = clock();
+            zPos -= movePowerZ;
+        }
 
+        mat4s projectionMat = glms_mat4_identity();
+        mat4s modelMat = glms_mat4_identity();
+        mat4s viewMat = glms_mat4_identity();
+
+        cameraRotX = ((float)-mousePos[0] + 0.5f) * ((float)Window.resolution.width * 0.001f);
+        cameraRotY = ((float)mousePos[1] - 0.5f) * ((float)Window.resolution.height * 0.001f);
+
+        modelMat = glms_translate(modelMat, (vec3s){xPos * movePowerX, yPos * movePowerY, zPos * movePowerZ});
+        viewMat = glms_lookat((vec3s){
+            cameraRotX * 1.0f,
+            cameraRotY * 1.0f,
+            2.0f,
+            },
+            (vec3s){0.0f, 0.0f, 0.0f},(vec3s){0.0f,1.0f,0.0f});
+        projectionMat = glms_perspective(glm_rad(45.0f), (float)Window.resolution.width / (float)Window.resolution.height, 0.1f, 10.0f);
+
+
+        UNIFORM data;
+        data.model = modelMat;
+        data.view = viewMat;
+        data.proj = projectionMat;
+        //data.proj.raw[0][1] *= -1;
+
+        PLCore_UploadDataToBuffer(RenderInstance.pl_device.device, &uniformBuffers[Renderer.priv_activeFrame].memory, sizeof(UNIFORM), &data);
 
 
 
         glfwPollEvents();
 
         PLCore_BeginFrame(RenderInstance, &Renderer, &Pipeline, &Window);
-
-        UNIFORM data;
-        data.model = glms_mat4_identity();
-        data.view = glms_mat4_identity();
-        data.proj = glms_mat4_identity();
-        
-        data.model = glms_translate(data.model, (vec3s){1.0f * xPos, 1.0f * yPos, 1.0f});
-        data.view = glms_lookat((vec3s){2.0f, (mousePos[0] * 5), (mousePos[1] * 5)}, (vec3s){0.0f, 0.0f, 0.0f}, (vec3s){0.0f, 0.0f, 1.0f});
-        data.proj = glms_perspective(glm_rad(45.0f), (float)Window.resolution.width / (float)Window.resolution.height, 0.1f, 10.0f);
-        data.proj.raw[0][1] *= -1;
-
-
-        PLCore_UploadDataToBuffer(RenderInstance.pl_device.device, &uniformBuffers[Renderer.priv_activeFrame].memory, sizeof(UNIFORM), &data);
 
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
 
