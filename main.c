@@ -11,10 +11,21 @@
 #define STB_IMAGE_IMPLEMENTATION 1
 #include "lib/stb_image.h"
 
-#define PLCORE_REFLECTION
+//#define PLCORE_REFLECTION
 #include "Abstraction/PlutoniumCore/PlutoniumCore.h"
 
-#define NEW_INDICES(i, vertspershape) 0 + (vertspershape * i), 1+ (vertspershape * i), 2+ (vertspershape * i), 2+ (vertspershape * i), 3+ (vertspershape * i), 0+ (vertspershape * i)
+#define NEW_6INDICES(i) 0 + (i * 4), \
+                        1 + (i * 4), \
+                        2 + (i * 4), \
+                        2 + (i * 4), \
+                        3 + (i * 4), \
+                        0 + (i * 4)
+
+#define NEW_QUAD(x,y,z, w,h, r,g,b, id)    \
+        {{x, y, z},          {r, g, b}, {-1.0f, 0.0f}, id}, \
+        {{x + w, y, z},      {r, g, b}, {0.0f, 0.0f}, id}, \
+        {{x + w, y + h, z},  {r, g, b}, {0.0f, 1.0f}, id}, \
+        {{x, y + h, z},      {r, g, b}, {-1.0f, 1.0f}, id}
 
 
 int main() {
@@ -31,43 +42,21 @@ int main() {
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
     PLCore_Vertex vertices[] = {
-            {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 3},
-            {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 3},
-            {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 3},
-            {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 3},
-
-            {{-0.5f - 1.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 2},
-            {{0.5f - 1.0f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 2},
-            {{0.5f - 1.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 2},
-            {{-0.5f - 1.0f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 2},
-
-            {{-0.5f + 1.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 1},
-            {{0.5f + 1.0f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 1},
-            {{0.5f + 1.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 1},
-            {{-0.5f + 1.0f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 1},
-
-            {{-0.5f + 2.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 4},
-            {{0.5f + 2.0f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 4},
-            {{0.5f + 2.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 4},
-            {{-0.5f + 2.0f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 4},
-
-            {{-0.5f + 3.0f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}, 5},
-            {{0.5f + 3.0f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}, 5},
-            {{0.5f + 3.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, 5},
-            {{-0.5f + 3.0f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}, 5},
+            NEW_QUAD(0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1),
+            NEW_QUAD(-0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 2),
     };
+    uint32_t indexCount = 6 * 5;
     uint32_t indices[] = {
-            0, 1, 2, 2, 3, 0,
-            NEW_INDICES(1, 4),
-            NEW_INDICES(2, 4),
-            NEW_INDICES(3, 4),
-            NEW_INDICES(4, 4),
-            //8, 9, 10, 10, 11, 8
+            NEW_6INDICES(0),
+            NEW_6INDICES(1),
+            NEW_6INDICES(2),
+            NEW_6INDICES(3),
+            NEW_6INDICES(4),
     };
-    PLCore_Buffer indexBuffer = PLCore_CreateGPUBuffer(RenderInstance, sizeof(uint32_t) * (6 * 5), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices);
+    PLCore_Buffer indexBuffer = PLCore_CreateGPUBuffer(RenderInstance, sizeof(uint32_t) * indexCount, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices);
 
     PLCore_DynamicVertexBuffer dynVertexBuffer = PLCore_CreateDynamicVertexBuffer();
-    PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 4 * 5, vertices);
+    PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 4 * 2, vertices);
     PLCore_Buffer vertexBuffer = PLCore_RequestDynamicVertexBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_Vertex));
 
 
@@ -140,7 +129,7 @@ int main() {
     PLCore_DescriptorPool imagePool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_BOUND_IMAGES);
     PLCore_Descriptor imageSets = PLCore_CreateDescriptorFromPool(RenderInstance, &imagePool, 1, 0, 8, VK_SHADER_STAGE_FRAGMENT_BIT);
     PLCore_Texture textures[] = {
-            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\circ.png"),
+            PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\canyon.jpg"),
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\canyon.jpg"),
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\jordini.jpg"),
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\comreezy.jpg"),
@@ -156,6 +145,7 @@ int main() {
         imageInfos[i].imageView = textures[i].image.view;
         imageInfos[i].sampler = VK_NULL_HANDLE;
     }
+
     VkWriteDescriptorSet write = {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .pNext = VK_NULL_HANDLE,
@@ -184,10 +174,16 @@ int main() {
     uint32_t fps = 0;
     clock_t timer = clock();
 
+    bool isBuddyHere = false;
+
     PLCore_CameraUniform camera = PLCore_CreateCameraUniform();
     while(!glfwWindowShouldClose(Window.window)) {
 
-
+        if (glfwGetMouseButton(Window.window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && !isBuddyHere) {
+            isBuddyHere = true;
+            PLCore_Vertex newVertices[] = {NEW_QUAD(0.0f, 1.0f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 3)};
+            PLCore_PushVerticesToDynamicVertexBuffer(&dynVertexBuffer, sizeof(PLCore_Vertex), 4, newVertices);
+        }
 
         // If The Vertex Data Has Been Updated
         if (dynVertexBuffer.dataChanged == 1) {
@@ -218,7 +214,7 @@ int main() {
         vkCmdBindVertexBuffers(activeBuffer, 0, 1, &vertexBuffer.buffer, offsets);
         vkCmdBindIndexBuffer(activeBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-        vkCmdDrawIndexed(activeBuffer, (6 * 5), 1, 0, 0, 0);
+        vkCmdDrawIndexed(activeBuffer, indexCount, 1, 0, 0, 0);
 
 
         PLCore_EndFrame(RenderInstance, &Renderer, &Pipeline, &Window);
