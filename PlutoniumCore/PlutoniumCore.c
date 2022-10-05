@@ -1706,8 +1706,8 @@ void PLCore_PollCameraMovements(PLCore_Window window, PLCore_CameraUniform* came
     mousePos[0] /= (float)window.resolution.width;
     mousePos[1] /= (float)window.resolution.height;
 
-    (*camera).rotX = (((float)-mousePos[0] + 0.5f) * ((float)window.resolution.width * 0.001f)) * 1.4f;
-    (*camera).rotY = (((float)-mousePos[1] + 0.5f) * ((float)window.resolution.height * 0.001f)) * 5.4f;
+    (*camera).rotX = (((float)-mousePos[0] + 0.5f) * ((float)window.resolution.width * 0.001f)) * 1.5f;
+    (*camera).rotY = (((float)-mousePos[1] + 0.5f) * ((float)window.resolution.height * 0.001f)) * 1.5f;
 
     if (clock() - camera->moveTimer > scheme.moveTime) {
         if (glfwGetKey(window.window, scheme.buttonLeft)) { (*camera).posX += scheme.moveSpeedX; }
