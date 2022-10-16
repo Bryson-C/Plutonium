@@ -12,7 +12,7 @@
 #include "lib/stb_image.h"
 
 //#define PLCORE_REFLECTION
-#include "Abstraction/PlutoniumCore/PlutoniumCore.h"
+#include "PlutoniumCore/PlutoniumCore.h"
 
 #define NEW_6INDICES(i) 0 + (i * 4), \
                         1 + (i * 4), \
@@ -23,10 +23,11 @@
 
 #define NEW_QUAD(x,y,z, w,h, r,g,b, id)    \
         {{x, y, z},          {r, g, b}, {-1.0f, 0.0f}, id}, \
-        {{x + w, y, z},      {r, g, b}, {0.0f, 0.0f}, id}, \
-        {{x + w, y + h, z},  {r, g, b}, {0.0f, 1.0f}, id}, \
+        {{x + w, y, z},      {r, g, b}, {0.0f, 0.0f},  id}, \
+        {{x + w, y + h, z},  {r, g, b}, {0.0f, 1.0f},  id}, \
         {{x, y + h, z},      {r, g, b}, {-1.0f, 1.0f}, id}
 
+#include "PlutoniumCore/ShaderReflection.h"
 
 int main() {
 
@@ -34,9 +35,13 @@ int main() {
     PLCore_Window Window = PLCore_CreateWindow(RenderInstance.pl_instance.instance, 800, 600);
     PLCore_Renderer Renderer = PLCore_CreateRenderer(RenderInstance, Window);
 
-
+    // TODO: Fix: These Send Un-Initialized Data, Thereby Throwing A Runtime Error
     PLCore_ShaderModule vShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\v.spv", VK_SHADER_STAGE_VERTEX_BIT, "main");
     PLCore_ShaderModule fShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\f.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "main");
+
+    DescriptorReturnData vDescriptorData = scanShader(RenderInstance, vShader);
+
+    //DescriptorReturnData fDescriptorData = scanShader(RenderInstance, fShader);
 
 
 
@@ -66,14 +71,14 @@ int main() {
             PLCore_CreateBuffer(RenderInstance, sizeof(PLCore_CameraUniform), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT)
     };
 
+    PLCore_UpdateDescriptor(RenderInstance, vDescriptorData.descriptors[0].sets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
 
-
-
+/*
     PLCore_DescriptorPool uniformPool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2);
     PLCore_Descriptor uniformSets = PLCore_CreateDescriptorFromPool(RenderInstance, &uniformPool, 2, 0, 1, VK_SHADER_STAGE_VERTEX_BIT);
-
     PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
     PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[1], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[1].bufferInfo, VK_NULL_HANDLE);
+*/
 
 
 
@@ -113,9 +118,8 @@ int main() {
     };
     VkPipelineVertexInputStateCreateInfo vertexInput = PLCore_Priv_CreateVertexInput(4, attribs, 1, bindings);
 
-
     PLCore_DescriptorPool samplerPool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_SAMPLER, 2);
-    PLCore_Descriptor samplerSets = PLCore_CreateDescriptorFromPool(RenderInstance, &samplerPool, 2, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+    PLCore_Descriptor samplerSets = PLCore_CreateDescriptorFromPool(RenderInstance, &samplerPool, 2, VK_DESCRIPTOR_TYPE_SAMPLER, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
     VkSampler sampler = PLCore_CreateSampler(RenderInstance.pl_device.device, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
     VkDescriptorImageInfo samplerInfo = {
             .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -127,7 +131,7 @@ int main() {
 
     const uint32_t MAX_BOUND_IMAGES = 8;
     PLCore_DescriptorPool imagePool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, MAX_BOUND_IMAGES);
-    PLCore_Descriptor imageSets = PLCore_CreateDescriptorFromPool(RenderInstance, &imagePool, 1, 0, 8, VK_SHADER_STAGE_FRAGMENT_BIT);
+    PLCore_Descriptor imageSets = PLCore_CreateDescriptorFromPool(RenderInstance, &imagePool, 1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 0, 8, VK_SHADER_STAGE_FRAGMENT_BIT);
     PLCore_Texture textures[] = {
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\canyon.jpg"),
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\canyon.jpg"),
@@ -163,7 +167,8 @@ int main() {
 
     uint32_t descriptorLayouts = 3;
     VkDescriptorSetLayout layouts[] = {
-            uniformSets.layouts[0],
+            //uniformSets.layouts[0],
+            vDescriptorData.descriptors[0].layouts[0],
             samplerSets.layouts[0],
             imageSets.layouts[0]
     };
@@ -203,7 +208,8 @@ int main() {
 
         uint32_t descriptorSetCount = 3;
         VkDescriptorSet sets[] = {
-                uniformSets.sets[Renderer.priv_activeFrame],
+                //uniformSets.sets[Renderer.priv_activeFrame],
+                vDescriptorData.descriptors[0].sets[0],
                 samplerSets.sets[Renderer.priv_activeFrame],
                 imageSets.sets[0],
         };

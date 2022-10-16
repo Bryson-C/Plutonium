@@ -8,90 +8,70 @@
 #include "PlutoniumCore.h"
 #include "SpirvReflection.h"
 
-// Changed
-// TODO: Fix
 typedef struct {
-    PLCore_Descriptor* sets;
-    PLCore_DescriptorPool pool;
+    const char* name;
+    uint32_t set;
+    uint32_t count;
+    VkDescriptorType type;
+    VkShaderStageFlagBits stage;
+} DescriptorInfo;
+
+typedef struct {
+    PLCore_Descriptor* descriptors;
+    PLCore_DescriptorPool* pools;
 } DescriptorReturnData;
+
 
 inline DescriptorReturnData scanShader(PLCore_RenderInstance instance, PLCore_ShaderModule shader) {
 
+    // Create The Module From The Shader To Be Used For Reflection
     SpvReflectShaderModule module;
     spvReflectCreateShaderModule(shader.size, shader.buffer, &module);
 
+    // Get Descriptor Information From The Shader
+    // Getting Set Count
     uint32_t descriptorSetCount = 0;
     spvReflectEnumerateDescriptorSets(&module, &descriptorSetCount, VK_NULL_HANDLE);
+    // Allocating Set Information
+    SpvReflectDescriptorSet** reflectSets = malloc(sizeof(SpvReflectShaderModule) * descriptorSetCount);
+    spvReflectEnumerateDescriptorSets(&module, &descriptorSetCount, reflectSets);
 
-    SpvReflectDescriptorSet** sets           = malloc(sizeof(SpvReflectShaderModule)         * descriptorSetCount);
-    VkDescriptorSet* descriptorSets         = malloc(sizeof(VkDescriptorSetLayoutBinding)   * descriptorSetCount);
-    VkDescriptorSetLayout* layouts          = malloc(sizeof(VkDescriptorSetLayoutBinding)   * descriptorSetCount);
+    // This Number Is Multiplied By The Allocation Max Count For More Space Just In Case
+    // For Example:
+    // malloc(sizeof(struct) * (count + padding));
+    static const uint32_t DESCRIPTOR_ALLOC_COUNT_PADDING = 5;
 
-    spvReflectEnumerateDescriptorSets(&module, &descriptorSetCount, sets);
+    PLCore_Descriptor* descriptors = malloc(sizeof(PLCore_Descriptor) * descriptorSetCount);
+    PLCore_DescriptorPool* descriptorPools = malloc(sizeof(PLCore_Descriptor) * descriptorSetCount);
 
-    uint32_t sizeCount = 0;
-    VkDescriptorPoolSize sizes[100];
-    VkDescriptorPool pool;
-
-    // loop to get the descriptor pool info
-    for (int i = 0; i < descriptorSetCount; i++) {
-        for (int j = 0; j < sets[i]->binding_count; j++) {
-            sizes[i].descriptorCount = 1;
-            sizes[i].type = (VkDescriptorType)sets[i]->bindings[j]->descriptor_type;
-            sizeCount++;
+    for (int descriptorSlot = 0; descriptorSlot < descriptorSetCount; descriptorSlot++) {
+        printf("Descriptor %i:\n", reflectSets[descriptorSlot]->set);
+        VkDescriptorPoolSize* sizes = malloc(sizeof(VkDescriptorPoolSize) * reflectSets[descriptorSlot]->binding_count);
+        uint32_t totalSetCount = 0;
+        for (int slotBinding = 0; slotBinding < reflectSets[descriptorSlot]->binding_count; slotBinding++) {
+            printf("\tSet: %i\n", reflectSets[descriptorSlot]->bindings[slotBinding]->set);
+            printf("\tType: %i\n", (VkDescriptorType)reflectSets[descriptorSlot]->bindings[slotBinding]->descriptor_type);
+            printf("\tName: \"%s\"\n", reflectSets[descriptorSlot]->bindings[slotBinding]->name);
+            totalSetCount += reflectSets[descriptorSlot]->bindings[slotBinding]->count;
+            sizes[slotBinding].type = (VkDescriptorType)reflectSets[descriptorSlot]->bindings[slotBinding]->descriptor_type;
+            sizes[slotBinding].descriptorCount = reflectSets[descriptorSlot]->bindings[slotBinding]->count;
         }
-    }
-    VkDescriptorPoolCreateInfo poolInfo = {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .pNext = VK_NULL_HANDLE,
-            .flags = 0,
-            .maxSets = descriptorSetCount,
-            .poolSizeCount = sizeCount,
-            .pPoolSizes = sizes,
-    };
-    vkCreateDescriptorPool(instance.pl_device.device, &poolInfo, VK_NULL_HANDLE, &pool);
-
-    for (int i = 0; i < descriptorSetCount; i++) {
-        VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * sets[i]->binding_count);
-        uint32_t setsInBinding = 0;
-        for (int j = 0; j < sets[i]->binding_count; j++) {
-            bindings[j].binding = sets[i]->bindings[j]->binding;
-            bindings[j].descriptorCount = sets[i]->bindings[j]->binding;
-            bindings[j].descriptorType = (VkDescriptorType)sets[i]->bindings[j]->descriptor_type;
-            bindings[j].stageFlags = shader.stage;
-            bindings[j].pImmutableSamplers = VK_NULL_HANDLE;
-            setsInBinding = sets[i]->bindings[j]->count;
-            printf("Descriptor '%s' at Set: %i, Array of: %i\n", sets[i]->bindings[j]->name, sets[i]->bindings[j]->set, sets[i]->bindings[j]->count);
-        }
-        VkDescriptorSetLayoutCreateInfo layoutInfo = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = VK_NULL_HANDLE,
-                .flags = 0,
-                .bindingCount = sets[i]->binding_count,
-                .pBindings = bindings,
-        };
-        vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, &(layouts[i]));
-
-        VkDescriptorSetLayout* localLayouts = malloc(sizeof(VkDescriptorSetLayoutBinding) * setsInBinding);
-        for (int k = 0; k < setsInBinding; k++)
-            localLayouts[k] = *layouts;
-
-        VkDescriptorSetAllocateInfo allocInfo = {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = VK_NULL_HANDLE,
-            .descriptorSetCount = setsInBinding,
-            .pSetLayouts = localLayouts,
-            .descriptorPool = pool,
-        };
-        vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, &descriptorSets[i]);
+        // TODO: FIX
+        // descriptorPools[descriptorSlot] = PLCore_CreateDescriptorPoolDetailed(instance, totalSetCount + DESCRIPTOR_ALLOC_COUNT_PADDING, reflectSets[descriptorSlot]->binding_count, sizes);
+        // descriptors[descriptorSlot].sets = PLCore_CreateDescriptorFromPool(instance, descriptorPools[descriptorSlot], totalSetCount, );
+        // descriptors[descriptorSlot].count++;
     }
 
-    return (DescriptorReturnData) {
-        .setCount = descriptorSetCount,
-        .descriptorSets = descriptorSets,
-        .layouts = layouts,
-        .pool = pool,
-    };
+
+
+
+
+
+
+    spvReflectDestroyShaderModule(&module);
+
+    DescriptorReturnData returnData;
+    return returnData;
     //spvReflectEnumeratePushConstantBlocks();
     //spvReflectEnumerateInputVariables();
 

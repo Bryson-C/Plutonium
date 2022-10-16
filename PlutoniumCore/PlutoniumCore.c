@@ -1401,58 +1401,39 @@ void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescrip
 }
 
 
-PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t typeCount, VkDescriptorType* types, VkShaderStageFlagBits* stages, uint32_t* maxAllocations) {
-    uint32_t totalAllocations = 0;
-    VkDescriptorPoolSize* sizes = malloc(sizeof(VkDescriptorPoolSize) * typeCount);
-    VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * typeCount);
-    for (uint32_t i = 0; i < typeCount; i++) {
-        sizes[i].descriptorCount = maxAllocations[i];
-        sizes[i].type = types[i];
-
-        totalAllocations += maxAllocations[i];
-        bindings[i].descriptorCount = maxAllocations[i];
-        bindings[i].binding = i;
-        bindings[i].descriptorType = types[i];
-        bindings[i].stageFlags = stages[i];
-        bindings[i].pImmutableSamplers = VK_NULL_HANDLE;
-    }
-    PLCore_DescriptorPoolAllocator allocator = {
-        .sizes = sizes,
-        .bindings = bindings,
-        .types = types,
-        .poolSizeCount = typeCount,
-        .totalAllocations = totalAllocations,
+PLCore_DescriptorPool PLCore_CreateDescriptorPoolDetailed(PLCore_RenderInstance instance, uint32_t maxSets, uint32_t sizeCount, VkDescriptorPoolSize* sizes) {
+    VkDescriptorPoolCreateInfo info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .pNext = VK_NULL_HANDLE,
+            .flags = 0,
+            .maxSets = maxSets,
+            .poolSizeCount = sizeCount,
+            .pPoolSizes = sizes,
     };
-    return allocator;
+    PLCore_DescriptorPool pool;
+    pool.currentAllocations = 0;
+    pool.maxAllocations = maxSets;
+    vkCreateDescriptorPool(instance.pl_device.device, &info, VK_NULL_HANDLE, &pool.pool);
 }
-PLCore_DescriptorPool PLCore_CreateDescriptprPoolFromAllocator(PLCore_RenderInstance instance, PLCore_DescriptorPoolAllocator allocator) {
-    return (PLCore_DescriptorPool) {
-        .pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, allocator.totalAllocations, allocator.poolSizeCount, allocator.sizes),
-        .maxAllocations = allocator.totalAllocations,
-        .currentAllocations = 0,
-        .type = 0,
-    };
-}
-PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance, VkDescriptorType type, uint32_t maxDescriptorAllocations) {
-    VkDescriptorPoolSize poolSize = PLCore_Priv_CreateDescritorPoolSize(type, maxDescriptorAllocations);
+PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance, VkDescriptorType typeFlags, uint32_t maxDescriptorAllocations) {
+    VkDescriptorPoolSize poolSize = PLCore_Priv_CreateDescritorPoolSize(typeFlags, maxDescriptorAllocations);
     PLCore_DescriptorPool pool = {
             .pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, maxDescriptorAllocations, 1, &poolSize),
             .maxAllocations = maxDescriptorAllocations,
             .currentAllocations = 0,
-            .type = type,
     };
     return pool;
 }
-PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance, PLCore_DescriptorPool* pool, uint32_t descriptorCount, uint32_t slot, uint32_t maxBoundAtOnce, VkShaderStageFlagBits stage) {
+PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance, PLCore_DescriptorPool* pool, uint32_t descriptorCount, VkDescriptorType type, uint32_t slot, uint32_t maxBoundAtOnce, VkShaderStageFlagBits stage) {
     PLCore_Descriptor descriptor;
     descriptor.layouts = malloc(sizeof(VkDescriptorSetLayout) * descriptorCount);
     descriptor.sets = malloc(sizeof(VkDescriptorSet) * descriptorCount);
     descriptor.count = descriptorCount;
 
     for (uint32_t i = 0; i < descriptorCount; i++) {
-        VkDescriptorSetLayoutBinding binding = PLCore_Priv_CreateDescriptorLayoutBinding(slot, pool->type, maxBoundAtOnce, stage);
+        VkDescriptorSetLayoutBinding binding = PLCore_Priv_CreateDescriptorLayoutBinding(slot, type, maxBoundAtOnce, stage);
         descriptor.layouts[i] = PLCore_Priv_CreateDescriptorLayout(instance.pl_device.device, 1, &binding);
-        descriptor.sets[i] = PLCore_Priv_CreateDescriptorSets(instance.pl_device.device, 1, pool->type, descriptor.layouts[i], pool->pool)[0];
+        descriptor.sets[i] = PLCore_Priv_CreateDescriptorSets(instance.pl_device.device, 1, type, descriptor.layouts[i], pool->pool)[0];
     }
     return descriptor;
 }

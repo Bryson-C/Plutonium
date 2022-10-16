@@ -33,6 +33,7 @@ enum PLCore_MemoryProperties {
     PROTECTED_MEMORY = VK_MEMORY_PROPERTY_PROTECTED_BIT,
 };
 
+
 typedef struct {
     VkInstance instance;
     VkDebugUtilsMessengerEXT priv_Messenger;
@@ -169,8 +170,8 @@ typedef struct {
     uint32_t totalAllocations;
 } PLCore_DescriptorPoolAllocator;
 typedef struct {
-    VkDescriptorType type;
-    uint32_t maxAllocations, currentAllocations;
+    uint32_t maxAllocations;
+    uint32_t currentAllocations;
     VkDescriptorPool pool;
 } PLCore_DescriptorPool;
 typedef struct {
@@ -290,11 +291,11 @@ void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescrip
 
 
 
-PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t typeCount, VkDescriptorType* types, VkShaderStageFlagBits* stages, uint32_t* maxAllocations);
-PLCore_DescriptorPool PLCore_CreateDescriptprPoolFromAllocator(PLCore_RenderInstance instance, PLCore_DescriptorPoolAllocator allocator);
-PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance, VkDescriptorType type, uint32_t maxDescriptorAllocations);
-PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance, PLCore_DescriptorPool* pool, uint32_t descriptorCount, uint32_t slot, uint32_t maxBoundAtOnce, VkShaderStageFlagBits stage);
+PLCore_DescriptorPool PLCore_CreateDescriptorPoolDetailed(PLCore_RenderInstance instance, uint32_t maxSets, uint32_t sizeCount, VkDescriptorPoolSize* sizes);
+PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance, VkDescriptorType typeFlags, uint32_t maxDescriptorAllocations);
+PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance, PLCore_DescriptorPool* pool, uint32_t descriptorCount, VkDescriptorType type, uint32_t slot, uint32_t maxBoundAtOnce, VkShaderStageFlagBits stage);
 void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
+
 
 
 
