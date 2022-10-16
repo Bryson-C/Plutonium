@@ -8,11 +8,11 @@
 #include "PlutoniumCore.h"
 #include "SpirvReflection.h"
 
+// Changed
+// TODO: Fix
 typedef struct {
-    uint32_t setCount;
-    VkDescriptorSet* descriptorSets;
-    VkDescriptorSetLayout* layouts;
-    VkDescriptorPool pool;
+    PLCore_Descriptor* sets;
+    PLCore_DescriptorPool pool;
 } DescriptorReturnData;
 
 inline DescriptorReturnData scanShader(PLCore_RenderInstance instance, PLCore_ShaderModule shader) {
