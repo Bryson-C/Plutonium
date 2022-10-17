@@ -162,13 +162,7 @@ typedef struct {
 typedef struct {
     PLCore_Image image;
 } PLCore_Texture;
-typedef struct {
-    VkDescriptorPoolSize* sizes;
-    VkDescriptorSetLayoutBinding* bindings;
-    VkDescriptorType* types;
-    uint32_t poolSizeCount;
-    uint32_t totalAllocations;
-} PLCore_DescriptorPoolAllocator;
+
 typedef struct {
     uint32_t maxAllocations;
     uint32_t currentAllocations;

@@ -29,6 +29,11 @@
 
 #include "PlutoniumCore/ShaderReflection.h"
 
+
+
+
+
+
 int main() {
 
     PLCore_RenderInstance RenderInstance = PLCore_CreateRenderingInstance();
@@ -39,7 +44,7 @@ int main() {
     PLCore_ShaderModule vShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\v.spv", VK_SHADER_STAGE_VERTEX_BIT, "main");
     PLCore_ShaderModule fShader = PLCore_Priv_CreateShader(RenderInstance.pl_device.device, "D:\\Plutonium\\Shaders\\f.spv", VK_SHADER_STAGE_FRAGMENT_BIT, "main");
 
-    DescriptorReturnData vDescriptorData = scanShader(RenderInstance, vShader);
+    //DescriptorReturnData vDescriptorData = scanShader(RenderInstance, vShader);
 
     //DescriptorReturnData fDescriptorData = scanShader(RenderInstance, fShader);
 
@@ -71,14 +76,14 @@ int main() {
             PLCore_CreateBuffer(RenderInstance, sizeof(PLCore_CameraUniform), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT)
     };
 
-    PLCore_UpdateDescriptor(RenderInstance, vDescriptorData.descriptors[0].sets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
+    //PLCore_UpdateDescriptor(RenderInstance, vDescriptorData.descriptors[0].sets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
 
-/*
+
     PLCore_DescriptorPool uniformPool = PLCore_CreateDescriptorPool(RenderInstance, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2);
-    PLCore_Descriptor uniformSets = PLCore_CreateDescriptorFromPool(RenderInstance, &uniformPool, 2, 0, 1, VK_SHADER_STAGE_VERTEX_BIT);
+    PLCore_Descriptor uniformSets = PLCore_CreateDescriptorFromPool(RenderInstance, &uniformPool, 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, 1, VK_SHADER_STAGE_VERTEX_BIT);
     PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[0], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
     PLCore_UpdateDescriptor(RenderInstance, uniformSets.sets[1], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[1].bufferInfo, VK_NULL_HANDLE);
-*/
+
 
 
 
@@ -167,8 +172,8 @@ int main() {
 
     uint32_t descriptorLayouts = 3;
     VkDescriptorSetLayout layouts[] = {
-            //uniformSets.layouts[0],
-            vDescriptorData.descriptors[0].layouts[0],
+            uniformSets.layouts[0],
+            //vDescriptorData.descriptors[0].layouts[0],
             samplerSets.layouts[0],
             imageSets.layouts[0]
     };
@@ -208,8 +213,8 @@ int main() {
 
         uint32_t descriptorSetCount = 3;
         VkDescriptorSet sets[] = {
-                //uniformSets.sets[Renderer.priv_activeFrame],
-                vDescriptorData.descriptors[0].sets[0],
+                uniformSets.sets[Renderer.priv_activeFrame],
+                //vDescriptorData.descriptors[0].sets[0],
                 samplerSets.sets[Renderer.priv_activeFrame],
                 imageSets.sets[0],
         };
