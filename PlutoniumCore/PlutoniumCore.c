@@ -1333,6 +1333,8 @@ PLCore_Priv_CreateDescriptorLayoutBinding
 
 // TODO: Documentation Of Descriptor Code
 
+
+/*
 VkDescriptorSetLayout PLCore_Priv_CreateDescriptorLayout (VkDevice device, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings) {
     VkDescriptorSetLayout layout;
     VkDescriptorSetLayoutCreateInfo layoutInfo;
@@ -1440,7 +1442,7 @@ PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance
 void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
     PLCore_Priv_WriteDescriptor(instance.pl_device.device, set, type, dstBinding, bufferInfo, imageInfo);
 }
-
+*/
 
 PLCore_Image PLCore_CreateImage(VkDevice device, VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlagBits usage, uint32_t queueFamilyIndex, VkPhysicalDeviceMemoryProperties memoryProperties) {
     PLCore_Image image;

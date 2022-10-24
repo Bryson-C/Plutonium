@@ -163,6 +163,7 @@ typedef struct {
     PLCore_Image image;
 } PLCore_Texture;
 
+/*
 typedef struct {
     uint32_t maxAllocations;
     uint32_t currentAllocations;
@@ -173,6 +174,7 @@ typedef struct {
     VkDescriptorSet* sets;
     uint32_t count;
 } PLCore_Descriptor;
+*/
 
 #ifdef PLCORE_REFLECTION
 
@@ -276,6 +278,8 @@ void                        PLCore_MoveDynamicBufferVertices(PLCore_DynamicVerte
 void                        PLCore_MoveDynamicBufferVerticesTo(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset);
 
 
+/*
+
 VkDescriptorSetLayoutBinding PLCore_Priv_CreateDescriptorLayoutBinding(uint32_t slot, VkDescriptorType type, uint32_t descriptorCount, VkShaderStageFlagBits stages);
 VkDescriptorSetLayout PLCore_Priv_CreateDescriptorLayout(VkDevice device, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings);
 VkDescriptorPoolSize PLCore_Priv_CreateDescritorPoolSize(VkDescriptorType type, uint32_t descriptorCount);
@@ -290,7 +294,7 @@ PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance
 PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance, PLCore_DescriptorPool* pool, uint32_t descriptorCount, VkDescriptorType type, uint32_t slot, uint32_t maxBoundAtOnce, VkShaderStageFlagBits stage);
 void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
 
-
+*/
 
 
 PLCore_Image PLCore_CreateImage(VkDevice device, VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlagBits usage, uint32_t queueFamilyIndex, VkPhysicalDeviceMemoryProperties memoryProperties);
