@@ -44,7 +44,6 @@ int main() {
 
     PLCore_ReflectedDescriptorSet vSets = scanShaders(RenderInstance, vShader);
     PLCore_ReflectedDescriptorSet fSets = scanShaders(RenderInstance, fShader);
-    return 0;
 
 
     // TODO: Vertices Are Not Correctly Placed At The Right Coordinants
@@ -74,6 +73,11 @@ int main() {
             PLCore_CreateBuffer(RenderInstance, sizeof(PLCore_CameraUniform), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT),
             PLCore_CreateBuffer(RenderInstance, sizeof(PLCore_CameraUniform), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, CPU_VISIBLE | CPU_COHERENT)
     };
+
+    PLCore_UpdateDescriptor(RenderInstance.pl_device.device, vSets.sets[0]->set, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, vSets.sets[0]->slot, &cameraUniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
+
+
+/*
     VkDescriptorType uniformTypes[] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER};
     uint32_t descriptorCounts[] = {1};
     PLCore_DescriptorPoolAllocator uniformPool = PLCore_CreateDescriptorPoolFromAllocator(
@@ -86,7 +90,7 @@ int main() {
     };
     PLCore_UpdateDescriptor(RenderInstance.pl_device.device, uniformSets[0].set, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[0].bufferInfo, VK_NULL_HANDLE);
     PLCore_UpdateDescriptor(RenderInstance.pl_device.device, uniformSets[1].set, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &cameraUniformBuffers[1].bufferInfo, VK_NULL_HANDLE);
-
+*/
 
     VkVertexInputAttributeDescription attribs[] = {
             {
@@ -139,8 +143,12 @@ int main() {
             .imageView = VK_NULL_HANDLE,
             .sampler = sampler,
     };
+
+    // TODO: This Crashes The Program
     PLCore_UpdateDescriptor(RenderInstance.pl_device.device, samplerSets[0].set, VK_DESCRIPTOR_TYPE_SAMPLER, 0, VK_NULL_HANDLE, &samplerInfo);
     PLCore_UpdateDescriptor(RenderInstance.pl_device.device, samplerSets[1].set, VK_DESCRIPTOR_TYPE_SAMPLER, 0, VK_NULL_HANDLE, &samplerInfo);
+
+
 
     const uint32_t MAX_BOUND_IMAGES = 8;
     VkDescriptorType imagePoolTypes[] = {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE};
@@ -163,6 +171,8 @@ int main() {
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\Assets\\self.jpg"),
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\Assets\\texture.jpg"),
     };
+
+
 
     VkDescriptorImageInfo imageInfos[8];
     for (int32_t i = 0; i < MAX_BOUND_IMAGES; i++) {
@@ -188,7 +198,7 @@ int main() {
 
     uint32_t descriptorLayouts = 3;
     VkDescriptorSetLayout layouts[] = {
-            uniformSets[0].layout,
+            vSets.sets[0]->layout,
             samplerSets[0].layout,
             imageSets[0].layout
     };
@@ -199,7 +209,6 @@ int main() {
     uint32_t fps = 0;
     clock_t timer = clock();
 
-    bool isBuddyHere = false;
 
     PLCore_CameraUniform camera = PLCore_CreateCameraUniform();
     while(!glfwWindowShouldClose(Window.window)) {
@@ -222,7 +231,7 @@ int main() {
 
         uint32_t descriptorSetCount = 3;
         VkDescriptorSet sets[] = {
-                uniformSets[Renderer.priv_activeFrame].set,
+                (*vSets.sets[0]).set,
                 samplerSets[0].set,
                 imageSets[0].set,
         };
@@ -234,7 +243,6 @@ int main() {
         vkCmdBindIndexBuffer(activeBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
         vkCmdDrawIndexed(activeBuffer, indexCount, 1, 0, 0, 0);
-
 
         PLCore_EndFrame(RenderInstance, &Renderer, &Pipeline, &Window);
         glfwSwapBuffers(Window.window);
@@ -251,6 +259,6 @@ int main() {
 
     glfwTerminate();
 
-
     return 0;
+
 }

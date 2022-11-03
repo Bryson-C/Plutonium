@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 
+
 #include "vulkan/vulkan.h"
 #include "SpirvReflection.h"
 
@@ -28,6 +29,7 @@ typedef struct {
 typedef struct {
     VkDescriptorSetLayout layout;
     VkDescriptorSet set;
+    uint32_t slot;
 } PLCore_DescriptorSet;
 
 typedef struct {
@@ -37,6 +39,8 @@ typedef struct {
     uint32_t* descriptorCount;
     // How Many Sets
     uint32_t descriptorSlots;
+    // Pool Object
+    VkDescriptorPool pool;
 } PLCore_ReflectedDescriptorSet;
 
 PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t descriptorSlot, VkDescriptorType* types, uint32_t* descriptorSetCount, uint32_t count, uint32_t maxDescriptorSets, VkShaderStageFlagBits shaderStage);

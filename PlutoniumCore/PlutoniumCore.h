@@ -6,6 +6,7 @@
 #define PLUTONIUM_PLUTONIUMCORE_H
 
 // Plutonium core? We should open that with a screwdriver
+// TODO: Split Code Into Seperate Files
 
 #include <stdio.h>              // required: printf, fprintf
 #include <stdlib.h>             // required: malloc, realloc, calloc

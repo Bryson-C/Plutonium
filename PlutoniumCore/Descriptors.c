@@ -11,29 +11,30 @@
 PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t descriptorSlot, VkDescriptorType* types, uint32_t* descriptorSetCount, uint32_t count, uint32_t maxDescriptorSets, VkShaderStageFlagBits shaderStage) {
 
     static const uint32_t DESCRIPTOR_ALLOC_COUNT_PADDING = 5;
-    VkDescriptorPoolSize* sizes = malloc(sizeof(VkDescriptorPoolSize) * count);
-    VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * count);
+    VkDescriptorPoolSize* sizes = (VkDescriptorPoolSize*)malloc(sizeof(VkDescriptorPoolSize) * count);
+    VkDescriptorSetLayoutBinding* bindings = (VkDescriptorSetLayoutBinding*)malloc(sizeof(VkDescriptorSetLayoutBinding) * count);
 
     for (int i = 0; i < count; i++) {
-        sizes[i] = (VkDescriptorPoolSize){.descriptorCount = (descriptorSetCount[i] + DESCRIPTOR_ALLOC_COUNT_PADDING), .type = types[i] };
-        bindings[i] = (VkDescriptorSetLayoutBinding){
-            .binding = descriptorSlot,
-            .descriptorType = types[i],
-            .descriptorCount = descriptorSetCount[i],
-            .stageFlags = shaderStage,
-            .pImmutableSamplers = VK_NULL_HANDLE,
-        };
+        sizes[i].descriptorCount = (descriptorSetCount[i] + DESCRIPTOR_ALLOC_COUNT_PADDING);
+        sizes[i].type = types[i];
+
+        bindings[i].binding = descriptorSlot;
+        bindings[i].descriptorType = types[i];
+        bindings[i].descriptorCount = descriptorSetCount[i];
+        bindings[i].stageFlags = (VkShaderStageFlags)shaderStage;
+        bindings[i].pImmutableSamplers = VK_NULL_HANDLE;
     }
 
-    return (PLCore_DescriptorPoolAllocator) {
-            .sizes = sizes,
-            .poolSizeCount = count,
-            .bindings = bindings,
-            .bindingCount = count,
-            .types = types,
-            .typeCount = count,
-            .maxDescriptorSets = maxDescriptorSets,
-    };
+    PLCore_DescriptorPoolAllocator poolAllocator;
+    poolAllocator.sizes = sizes;
+    poolAllocator.poolSizeCount = count;
+    poolAllocator.bindings = bindings;
+    poolAllocator.bindingCount = count;
+    poolAllocator.types = types;
+    poolAllocator.typeCount = count;
+    poolAllocator.maxDescriptorSets = maxDescriptorSets;
+
+    return poolAllocator;
 }
 
 PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolFromAllocator(VkDevice device, PLCore_DescriptorPoolAllocator allocator) {
@@ -60,7 +61,7 @@ PLCore_DescriptorSet PLCore_CreateDescriptorSets(VkDevice device, VkDescriptorTy
     const uint32_t MAX_BINDINGS = 20;
 
     uint32_t bindingCount = 0;
-    VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * MAX_BINDINGS);
+    VkDescriptorSetLayoutBinding* bindings = (VkDescriptorSetLayoutBinding*)malloc(sizeof(VkDescriptorSetLayoutBinding) * MAX_BINDINGS);
 
 
     // Search Through The Allocators Bindings To Find The Correct Descriptor Type
@@ -82,20 +83,20 @@ PLCore_DescriptorSet PLCore_CreateDescriptorSets(VkDevice device, VkDescriptorTy
     VkDescriptorSetLayout layout;
     vkCreateDescriptorSetLayout(device, &layoutInfo, VK_NULL_HANDLE, &layout);
 
-    VkDescriptorSetAllocateInfo allocInfo = {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = VK_NULL_HANDLE,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &layout,
-            .descriptorPool = allocator.pool,
-    };
+    VkDescriptorSetAllocateInfo allocInfo;
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.pNext = VK_NULL_HANDLE;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &layout;
+    allocInfo.descriptorPool = allocator.pool;
+
     VkDescriptorSet set;
     vkAllocateDescriptorSets(device, &allocInfo, &set);
 
-    PLCore_DescriptorSet descriptorSet = {
-            .set = set,
-            .layout = layout
-    };
+    PLCore_DescriptorSet descriptorSet;
+    descriptorSet.set = set;
+    descriptorSet.layout = layout;
+
     return descriptorSet;
 }
 
@@ -119,88 +120,97 @@ void PLCore_UpdateDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorT
 PLCore_ReflectedDescriptorSet scanShaders(PLCore_RenderInstance instance, PLCore_ShaderModule module) {
     PLCore_ReflectedDescriptorSet reflectedSets;
 
+
     SpvReflectShaderModule mod;
     spvReflectCreateShaderModule(module.size, module.buffer, &mod);
 
     uint32_t descriptorCount = 0;
     spvReflectEnumerateDescriptorSets(&mod, &descriptorCount, VK_NULL_HANDLE);
-    SpvReflectDescriptorSet** descriptorSet = malloc(sizeof(SpvReflectDescriptorSet*) * descriptorCount);
-    spvReflectEnumerateDescriptorSets(&mod, &descriptorCount, descriptorSet);
+    SpvReflectDescriptorSet** descriptorSets = malloc(sizeof(SpvReflectDescriptorSet*) * descriptorCount);
+    spvReflectEnumerateDescriptorSets(&mod, &descriptorCount, descriptorSets);
     reflectedSets.descriptorSlots = descriptorCount;
-
-
-    PLCore_DescriptorSet** returnSets = malloc(sizeof(PLCore_DescriptorSet*) * descriptorCount);
     reflectedSets.descriptorCount = malloc(sizeof(uint32_t) * descriptorCount);
 
-    uint32_t allocCount = 0;
-    for (int descriptorSlot = 0; descriptorSlot < descriptorCount; descriptorSlot++) {
-        SpvReflectDescriptorSet* thisSet = &(*descriptorSet)[descriptorSlot];
-        printf("Set: %i\n", thisSet->set);
-        VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * thisSet->binding_count);
-        VkDescriptorPoolSize* sizes = malloc(sizeof(VkDescriptorPoolSize) * thisSet->binding_count);
-        for (int descriptorBinding = 0; descriptorBinding < thisSet->binding_count; descriptorBinding++) {
-            SpvReflectDescriptorBinding* thisBinding = (thisSet->bindings[descriptorBinding]);
-            bindings[descriptorBinding] = (VkDescriptorSetLayoutBinding){
-                    .binding = thisBinding->binding,
-                    .descriptorType = (VkDescriptorType)thisBinding->descriptor_type,
-                    .descriptorCount = (allocCount = thisBinding->count),
-                    .stageFlags = module.stage,
-                    .pImmutableSamplers = VK_NULL_HANDLE,
-            };
-            sizes[descriptorBinding] = (VkDescriptorPoolSize){
-                .descriptorCount = thisBinding->count,
-                .type = (VkDescriptorType)thisBinding->descriptor_type,
-            };
-            printf("\tType: %i\n", (VkDescriptorType)thisBinding->descriptor_type);
-        }
-        const uint32_t MAX_SETS = 100;
-        VkDescriptorPoolCreateInfo poolInfo = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                .pNext = VK_NULL_HANDLE,
-                .flags = 0,
-                .maxSets = MAX_SETS,
-                .poolSizeCount = thisSet->binding_count,
-                .pPoolSizes = sizes,
-        };
-        VkDescriptorSetLayoutCreateInfo layoutInfo = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = VK_NULL_HANDLE,
-                .flags = 0,
-                .bindingCount = thisSet->binding_count,
-                .pBindings = bindings,
-        };
+    const uint32_t DESCRIPTORS_PER_TYPE = 25;
+    VkDescriptorPoolSize sizes[11] = {
+            {VK_DESCRIPTOR_TYPE_SAMPLER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, DESCRIPTORS_PER_TYPE},
+    };
+    VkDescriptorPoolCreateInfo poolInfo;
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.pNext = VK_NULL_HANDLE;
+    poolInfo.flags = 0;
+    poolInfo.poolSizeCount = 11;
+    poolInfo.pPoolSizes = sizes;
+    // Descriptor Types * DESCRIPTORS_PER_TYPE
+    poolInfo.maxSets = 11 * DESCRIPTORS_PER_TYPE;
 
-        VkDescriptorPool pool;
-        vkCreateDescriptorPool(instance.pl_device.device, &poolInfo, VK_NULL_HANDLE, &pool);
+    VkDescriptorPool pool;
+    vkCreateDescriptorPool(instance.pl_device.device, &poolInfo, VK_NULL_HANDLE, &pool);
+    reflectedSets.pool = pool;
+
+    for (int set = 0; set < descriptorCount; set++) {
+        printf("Set: %u\n", descriptorSets[set]->set);
+        uint32_t allocCount = 0;
+        VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * descriptorSets[set]->binding_count);
+        for (int binding = 0; binding < descriptorSets[set]->binding_count; binding++) {
+            printf("\tBinding: \"%s\"\n", descriptorSets[set]->bindings[binding]->name);
+
+            bindings[binding].binding = descriptorSets[set]->bindings[binding]->binding;
+            printf("\tBinding# : %u\n", descriptorSets[set]->bindings[binding]->binding);
+            bindings[binding].descriptorCount = descriptorSets[set]->bindings[binding]->count;
+            bindings[binding].descriptorType = (VkDescriptorType)descriptorSets[set]->bindings[binding]->descriptor_type;
+            bindings[binding].pImmutableSamplers = VK_NULL_HANDLE;
+            bindings[binding].stageFlags = module.stage;
+
+            allocCount += descriptorSets[set]->bindings[binding]->count;
+        }
+        printf("\tBinding Count: %u\n", descriptorSets[set]->binding_count);
+        printf("\tAllocating: %u\n", allocCount);
+
         VkDescriptorSetLayout layout;
+        VkDescriptorSetLayoutCreateInfo layoutInfo;
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.pNext = VK_NULL_HANDLE;
+        layoutInfo.flags = 0;
+        layoutInfo.bindingCount = descriptorSets[set]->binding_count;
+        layoutInfo.pBindings = bindings;
         vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, &layout);
 
-
-
-        VkDescriptorSetLayout* localLayouts = malloc(sizeof(VkDescriptorSetLayout) * allocCount);
+        VkDescriptorSetLayout* layoutCopies = malloc(sizeof(VkDescriptorSetLayout) * allocCount);
         for (int i = 0; i < allocCount; i++) {
-            localLayouts[i] = layout;
+            layoutCopies[i] = layout;
         }
 
-        VkDescriptorSetAllocateInfo allocInfo = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                .pNext = VK_NULL_HANDLE,
-                .descriptorPool = pool,
-                .descriptorSetCount = allocCount,
-                .pSetLayouts = &layout,
-        };
-        VkDescriptorSet* set = malloc(sizeof(VkDescriptorSet) * allocCount);
-        vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, set);
+        VkDescriptorSetAllocateInfo allocInfo;
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.pNext = VK_NULL_HANDLE;
+        allocInfo.descriptorPool = reflectedSets.pool;
+        allocInfo.pSetLayouts = layoutCopies;
+        allocInfo.descriptorSetCount = allocCount;
 
-        PLCore_DescriptorSet* localSets = malloc(sizeof(allocCount));
+        VkDescriptorSet* sets = malloc(sizeof(VkDescriptorSet) * allocCount);
+        vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, sets);
+
+        reflectedSets.sets = (PLCore_DescriptorSet**)malloc(sizeof(PLCore_DescriptorSet*) * descriptorCount);
+
+        reflectedSets.descriptorCount[set] = allocCount;
         for (int i = 0; i < allocCount; i++) {
-            localSets[i].set = set[i];
-            localSets[i].layout = layout;
+            reflectedSets.sets[set] = (PLCore_DescriptorSet*)malloc(sizeof(PLCore_DescriptorSet*));
+            (*reflectedSets.sets[set]).set = sets[i];
+            (*reflectedSets.sets[set]).layout = layoutCopies[i];
+            (*reflectedSets.sets[set]).slot = descriptorSets[set]->set;
         }
-        returnSets[descriptorSlot] = localSets;
-        reflectedSets.descriptorCount[descriptorSlot] = allocCount;
     }
-    reflectedSets.sets = returnSets;
     return reflectedSets;
 }
 
