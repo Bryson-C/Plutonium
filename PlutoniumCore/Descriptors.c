@@ -106,8 +106,7 @@ PLCore_DescriptorSet PLCore_CreateDescriptorSets(VkDevice device, VkDescriptorTy
     return descriptorSet;
 }
 
-
-void PLCore_UpdateDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
+void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
     VkWriteDescriptorSet write;
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     write.pNext = VK_NULL_HANDLE;
@@ -120,10 +119,10 @@ void PLCore_UpdateDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorT
     write.pBufferInfo = bufferInfo;
     write.pTexelBufferView = VK_NULL_HANDLE;
 
-    vkUpdateDescriptorSets(device, 1, &write, 0, VK_NULL_HANDLE);
+    vkUpdateDescriptorSets(instance.pl_device.device, 1, &write, 0, VK_NULL_HANDLE);
 }
 
-
+/*
 PLCore_ReflectedDescriptorSet scanShaders(PLCore_RenderInstance instance, PLCore_ShaderModule module) {
     PLCore_ReflectedDescriptorSet reflectedSets;
 
@@ -232,7 +231,6 @@ PLCore_ReflectedDescriptorSet scanShaders(PLCore_RenderInstance instance, PLCore
     return reflectedSets;
 }
 
-
 static PLCore_EXP_shaderDescriptors PLCore_EXP_newShaderDescriptor(uint32_t descriptorCount) {
     PLCore_EXP_shaderDescriptors descriptor;
     descriptor.descriptorCount = malloc(sizeof(uint32_t) * descriptorCount);
@@ -337,7 +335,7 @@ PLCore_EXP_shaderDescriptors PLCore_EXP_ReflectShader(PLCore_RenderInstance inst
     }
     return descriptor;
 }
-
+*/
 
 static const uint32_t DESCRIPTORS_PER_TYPE = 25;
 static const uint32_t DESCRIPTORS_TYPE_COUNT = 11;
@@ -368,6 +366,43 @@ VkDescriptorPool PLCore_CreateGeneralizedDescriptorPool(PLCore_RenderInstance in
     return pool;
 }
 
+VkDescriptorSetLayoutBinding PLCore_CreateDescriptorSetLayoutBinding(uint32_t slot, uint32_t count, VkDescriptorType type, VkShaderStageFlags stage) {
+    VkDescriptorSetLayoutBinding binding;
+    binding.binding = slot;
+    binding.descriptorType = type;
+    binding.descriptorCount = count;
+    binding.stageFlags = stage;
+    binding.pImmutableSamplers = VK_NULL_HANDLE;
+    return binding;
+}
+
+VkDescriptorSet PLCore_CreateDescriptorSetAdvanced(PLCore_RenderInstance instance, VkDescriptorPool pool, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings, VkShaderStageFlags stage, VkDescriptorSetLayout* layout) {
+    VkDescriptorSetLayoutCreateInfo layoutInfo;
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.pNext = VK_NULL_HANDLE;
+    layoutInfo.flags = 0;
+    layoutInfo.bindingCount = bindingCount;
+    layoutInfo.pBindings = bindings;
+
+    if (layout == VK_NULL_HANDLE)
+        assert(1);
+
+    vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, layout);
+
+
+    VkDescriptorSetAllocateInfo allocInfo;
+    allocInfo.pNext = VK_NULL_HANDLE;
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = layout;
+    allocInfo.descriptorPool = pool;
+
+    VkDescriptorSet set;
+    vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, &set);
+
+    return set;
+}
+
 VkDescriptorSet PLCore_CreateDescriptorSet(PLCore_RenderInstance instance, VkDescriptorPool pool, uint32_t slot, VkDescriptorType type, VkShaderStageFlags stage, VkDescriptorSetLayout* layout) {
 
     VkDescriptorSetLayoutBinding binding;
@@ -389,7 +424,6 @@ VkDescriptorSet PLCore_CreateDescriptorSet(PLCore_RenderInstance instance, VkDes
     vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, layout);
 
 
-    VkDescriptorSet set;
     VkDescriptorSetAllocateInfo allocInfo;
     allocInfo.pNext = VK_NULL_HANDLE;
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -397,6 +431,7 @@ VkDescriptorSet PLCore_CreateDescriptorSet(PLCore_RenderInstance instance, VkDes
     allocInfo.pSetLayouts = layout;
     allocInfo.descriptorPool = pool;
 
+    VkDescriptorSet set;
     vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, &set);
 
     return set;

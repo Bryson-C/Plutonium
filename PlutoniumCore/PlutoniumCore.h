@@ -162,6 +162,7 @@ typedef struct {
 } PLCore_Buffer;
 typedef struct {
     PLCore_Image image;
+    VkDescriptorImageInfo imageInfo;
 } PLCore_Texture;
 
 /*
@@ -315,6 +316,7 @@ typedef struct {
     int buttonRight, buttonLeft, buttonForward, buttonBackward, buttonUp, buttonDown;
     float moveSpeedX, moveSpeedY, moveSpeedZ;
     int moveTime;
+    int useCameraMouseMovement;
 } PLCore_CameraMoveScheme;
 PLCore_CameraMoveScheme PLCore_GetDefaultMoveScheme();
 

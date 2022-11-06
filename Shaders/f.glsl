@@ -7,10 +7,13 @@ layout(location = 2) in flat uint inTexId;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 1, binding = 0) uniform sampler textureSampler;
-layout(set = 2, binding = 0) uniform texture2D textures[8];
+layout(set = 1, binding = 1) uniform texture2D textures[8];
 
 
 void main() {
-    outColor = texture( sampler2D(textures[inTexId], textureSampler), inTexCoords );
-    //outColor = inColor;
+    outColor = inColor;
+    if (inTexId == 0)
+        outColor = inColor;
+    else
+        outColor = inColor * texture(sampler2D(textures[inTexId], textureSampler), inTexCoords);
 }

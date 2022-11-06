@@ -50,36 +50,26 @@ typedef struct {
 } PLCore_DescriptorSet;
 
 typedef struct {
-    // Actual Vulkan Descriptor Sets
-    PLCore_DescriptorSet* sets;
-    // How Many Descriptors Per Set
-    uint32_t* descriptorSetCount;
-    // Pool Object
-    VkDescriptorPool pool;
-} PLCore_ReflectedDescriptorSet;
 
-typedef struct {
-    // Array Of Sizes For Descriptor Sets
-    uint32_t* descriptorCount;
-    // 2D Array Of Sets
-    VkDescriptorSet** sets;
-    // 2D Array Of Layouts
-    VkDescriptorSetLayout** layouts;
-    // Array Of Writes
-    VkWriteDescriptorSet* write;
-} PLCore_EXP_shaderDescriptors;
+} PLCore_Priv_DescriptorReflectionData;
 
 
 PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t descriptorSlot, VkDescriptorType* types, uint32_t* descriptorSetCount, uint32_t count, uint32_t maxDescriptorSets, VkShaderStageFlagBits shaderStage);
 PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolFromAllocator(VkDevice device, PLCore_DescriptorPoolAllocator allocator);
 PLCore_DescriptorSet PLCore_CreateDescriptorSets(VkDevice device, VkDescriptorType typeFlags, PLCore_DescriptorPoolAllocator allocator);
-void PLCore_UpdateDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
+void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
 
+/*
 PLCore_ReflectedDescriptorSet scanShaders(PLCore_RenderInstance instance, PLCore_ShaderModule module);
 
 PLCore_EXP_shaderDescriptors PLCore_EXP_ReflectShader(PLCore_RenderInstance instance, PLCore_ShaderModule module);
+*/
+
+VkDescriptorSetLayoutBinding PLCore_CreateDescriptorSetLayoutBinding(uint32_t slot, uint32_t count, VkDescriptorType type, VkShaderStageFlags stage);
+VkDescriptorSet PLCore_CreateDescriptorSetAdvanced(PLCore_RenderInstance instance, VkDescriptorPool pool, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings, VkShaderStageFlags stage, VkDescriptorSetLayout* layout);
 
 VkDescriptorPool PLCore_CreateGeneralizedDescriptorPool(PLCore_RenderInstance instance);
+
 VkDescriptorSet PLCore_CreateDescriptorSet(PLCore_RenderInstance instance, VkDescriptorPool pool, uint32_t slot, VkDescriptorType type, VkShaderStageFlags stage, VkDescriptorSetLayout* layout);
 
 #endif //PLUTONIUM_DESCRIPTORS_H

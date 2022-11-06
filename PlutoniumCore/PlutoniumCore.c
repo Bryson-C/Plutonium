@@ -1573,7 +1573,39 @@ void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, ui
 
     vkQueueSubmit(submitQueue, 1, &submitInfo, *waitFence);
 }
+
+#define DEBUG
+
+#ifdef DEBUG
+
+    static size_t DEBUG_time = 0;
+    static size_t DEBUG_time_since_last = 0;
+    static char DEBUG_title[256] = "";
+
+    #define PLCORE_TIME_TITLED(timerName) \
+        strcpy_s(DEBUG_title, 256, timerName); \
+        DEBUG_time = clock();             \
+        DEBUG_time_since_last = clock();
+
+    #define PLCORE_TIME() \
+        printf("Time Taken For %s: %zi\n", DEBUG_title, clock() - DEBUG_time); \
+        DEBUG_time = clock();                                                  \
+        DEBUG_time_since_last = clock();
+
+    #define PLCORE_CHECK_TIME() \
+        printf("\tCurrent Time: %zi\n", clock() - DEBUG_time_since_last); \
+        DEBUG_time_since_last = clock();
+
+#else
+
+    #define PLCORE_TIME_TITLED(name)
+    #define PLCORE_TIME()
+    #define PLCORE_CHECK_TIME()
+
+#endif
+
 PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, const char* path) {
+    PLCORE_TIME_TITLED("New Texture")
     int32_t width, height, channels;
     void* pixels = stbi_load(path, &width, &height, &channels, STBI_rgb_alpha);
     if (pixels == VK_NULL_HANDLE) fprintf(stderr, "%s", "big sad: loading images\n");
@@ -1583,16 +1615,18 @@ PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Rende
     VkExtent3D imageExtent = (VkExtent3D){width, height, 1};
 
 
-
     PLCore_Image textureImage = PLCore_CreateImage(instance.pl_device.device, VK_IMAGE_TYPE_2D, imageFormat, imageExtent, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, instance.pl_device.transferQueue.familyIndex, instance.pl_device.memoryProperties);
+    PLCORE_CHECK_TIME()
 
     PLCore_Buffer stagingBuffer = PLCore_CreateBuffer(instance, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, CPU_COHERENT | CPU_VISIBLE);
 
     PLCore_UploadDataToBuffer(instance.pl_device.device, &stagingBuffer.memory, imageSize, pixels);
+    PLCORE_CHECK_TIME()
 
     stbi_image_free(pixels);
 
     VkCommandBuffer* cmdBuffer = PLCore_Priv_CreateCommandBuffers(instance.pl_device.device, renderer.graphicsPool.pool, 1);
+    PLCORE_CHECK_TIME()
 
     VkFenceCreateInfo fenceInfo = {
             .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -1601,7 +1635,7 @@ PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Rende
     };
     VkFence fence;
     vkCreateFence(instance.pl_device.device, &fenceInfo, VK_NULL_HANDLE, &fence);
-
+    PLCORE_CHECK_TIME()
 
     PLCore_TransitionTextureLayout(stagingBuffer,
                                    textureImage,
@@ -1610,15 +1644,20 @@ PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Rende
                                    *cmdBuffer,
                                    &fence,
                                    instance.pl_device.graphicsQueue.queue);
-
+    PLCORE_CHECK_TIME()
     vkWaitForFences(instance.pl_device.device, 1, &fence, VK_TRUE, UINT64_MAX);
     vkFreeCommandBuffers(instance.pl_device.device, renderer.graphicsPool.pool, 1, cmdBuffer);
+    PLCORE_CHECK_TIME()
 
     PLCore_Texture texture;
     texture.image = textureImage;
 
-    vkDestroyBuffer(instance.pl_device.device, stagingBuffer.buffer, VK_NULL_HANDLE);
+    texture.imageInfo.sampler = VK_NULL_HANDLE;
+    texture.imageInfo.imageView = textureImage.view;
+    texture.imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+    vkDestroyBuffer(instance.pl_device.device, stagingBuffer.buffer, VK_NULL_HANDLE);
+    PLCORE_TIME()
     return texture;
 }
 
@@ -1663,7 +1702,8 @@ PLCore_CameraMoveScheme PLCore_GetDefaultMoveScheme() {
             .moveSpeedX = 0.25f,
             .moveSpeedY = 0.25f,
             .moveSpeedZ = 0.25f,
-            .moveTime = 25
+            .moveTime = 25,
+            .useCameraMouseMovement = 0,
     };
 }
 
@@ -1684,14 +1724,15 @@ PLCore_CameraUniform PLCore_CreateCameraUniform() {
 }
 void PLCore_PollCameraMovements(PLCore_Window window, PLCore_CameraUniform* camera, PLCore_CameraMoveScheme scheme) {
 
-    double mousePos[2];
-    glfwGetCursorPos(window.window, &mousePos[0], &mousePos[1]);
-    mousePos[0] /= (float)window.resolution.width;
-    mousePos[1] /= (float)window.resolution.height;
+    if (scheme.useCameraMouseMovement) {
+        double mousePos[2];
+        glfwGetCursorPos(window.window, &mousePos[0], &mousePos[1]);
+        mousePos[0] /= (float) window.resolution.width;
+        mousePos[1] /= (float) window.resolution.height;
 
-    (*camera).rotX = (((float)-mousePos[0] + 0.5f) * ((float)window.resolution.width * 0.001f)) * 1.5f;
-    (*camera).rotY = (((float)-mousePos[1] + 0.5f) * ((float)window.resolution.height * 0.001f)) * 1.5f;
-
+        (*camera).rotX = (((float) -mousePos[0] + 0.5f) * ((float) window.resolution.width * 0.001f)) * 1.5f;
+        (*camera).rotY = (((float) -mousePos[1] + 0.5f) * ((float) window.resolution.height * 0.001f)) * 1.5f;
+    }
     if (clock() - camera->moveTimer > scheme.moveTime) {
         if (glfwGetKey(window.window, scheme.buttonLeft)) { (*camera).posX += scheme.moveSpeedX; }
         if (glfwGetKey(window.window, scheme.buttonRight)) { (*camera).posX -= scheme.moveSpeedX; }
