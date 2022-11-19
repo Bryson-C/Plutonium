@@ -337,8 +337,10 @@ PLCore_EXP_shaderDescriptors PLCore_EXP_ReflectShader(PLCore_RenderInstance inst
 }
 */
 
-static const uint32_t DESCRIPTORS_PER_TYPE = 25;
-static const uint32_t DESCRIPTORS_TYPE_COUNT = 11;
+//static const uint32_t
+#define DESCRIPTORS_PER_TYPE 25
+//static const uint32_t
+#define DESCRIPTORS_TYPE_COUNT 11
 VkDescriptorPool PLCore_CreateGeneralizedDescriptorPool(PLCore_RenderInstance instance) {
     VkDescriptorPoolSize sizes[DESCRIPTORS_TYPE_COUNT] = {
             {VK_DESCRIPTOR_TYPE_SAMPLER, DESCRIPTORS_PER_TYPE},

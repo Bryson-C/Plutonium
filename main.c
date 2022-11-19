@@ -8,6 +8,9 @@
 #include <cglm/cglm.h>
 #include <cglm/struct.h>
 
+#include "Windows.h"
+
+
 
 #define STB_IMAGE_IMPLEMENTATION 1
 #include "lib/stb_image.h"
@@ -49,6 +52,7 @@ static char DEBUG_title[256] = "";
 #endif
 
 int main() {
+
     PLCORE_TIME_TITLED("Instance");
     PLCore_RenderInstance RenderInstance = PLCore_CreateRenderingInstance();
     PLCORE_TIME();
@@ -80,6 +84,8 @@ int main() {
             NEW_QUAD(-2.0f, -0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 3),
             NEW_QUAD(1.0f, -0.5f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 6),
     };
+
+
     uint32_t indexCount = 6 * 5;
     uint32_t indices[] = {
             NEW_6INDICES(0),
@@ -170,9 +176,10 @@ int main() {
     };
     PLCORE_TIME()
 
-
     PLCORE_TIME_TITLED("Textures")
-    static const uint32_t MAX_BOUND_IMAGES = 8;
+    #define MAX_BOUND_IMAGES 8
+
+
     PLCore_Texture textures[MAX_BOUND_IMAGES] = {
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\Assets\\canyon.jpg"),
             PLCore_CreateTexture(RenderInstance, Renderer, "D:\\Plutonium\\Assets\\canyon.jpg"),
@@ -237,9 +244,6 @@ int main() {
     VkDescriptorSetLayout layouts[] = {
             cameraLayout[0],
             textureLayout,
-            //vSets.layouts[0][0],
-            //fSets.sets[0]->layout,
-            //imageSets[0].layout
     };
 
     PLCORE_TIME_TITLED("Pipeline")
@@ -256,13 +260,39 @@ int main() {
     PLCore_CameraUniform camera = PLCore_CreateCameraUniform();
     PLCORE_TIME()
 
+    clock_t playerMoveTime = clock();
     while(!glfwWindowShouldClose(Window.window)) {
 
+        if (clock() - playerMoveTime >= 16) {
+            playerMoveTime = clock();
+            VkCommandBuffer updateBuffer = PLCore_Priv_CreateCommandBuffers(RenderInstance.pl_device.device, Renderer.graphicsPool.pool, 1)[0];
+            PLCore_RecordCommandBuffer(updateBuffer);
+
+            PLCore_Vertex *updated = vertices + 8;
+            if (glfwGetKey(Window.window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+                (*(updated + 0)).xyz[0] += 0.25f;
+                (*(updated + 1)).xyz[0] += 0.25f;
+                (*(updated + 2)).xyz[0] += 0.25f;
+                (*(updated + 3)).xyz[0] += 0.25f;
+            }
+            if (glfwGetKey(Window.window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+                (*(updated + 0)).xyz[0] -= 0.25f;
+                (*(updated + 1)).xyz[0] -= 0.25f;
+                (*(updated + 2)).xyz[0] -= 0.25f;
+                (*(updated + 3)).xyz[0] -= 0.25f;
+            }
+            vkCmdUpdateBuffer(updateBuffer, vertexBuffer.buffer, sizeof(PLCore_Vertex) * 8, sizeof(PLCore_Vertex) * 8, updated);
+
+            PLCore_StopCommandBuffer(updateBuffer);
+            PLCore_SubmitCommandBuffer(updateBuffer, RenderInstance.pl_device.graphicsQueue.queue, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE);
+
+        }
         // If The Vertex Data Has Been Updated
         if (dynVertexBuffer.dataChanged == 1) {
+            // Wait For Both Fences Because Both Frames Might Still Be In Use
+            vkWaitForFences(RenderInstance.pl_device.device, 2, Renderer.priv_renderFences, VK_TRUE, UINT64_MAX);
             vertexBuffer = PLCore_RequestDynamicVertexBufferToGPU(RenderInstance, &dynVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(PLCore_Vertex));
         }
-
 
         glfwPollEvents();
         PLCore_PollCameraMovements(Window, &camera, keybindingScheme);
@@ -271,18 +301,14 @@ int main() {
                                   sizeof(PLCore_CameraUniform),
                                   &camera);
 
-
         PLCore_BeginFrame(RenderInstance, &Renderer, &Pipeline, &Window);
-
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(Renderer);
+
 
         uint32_t descriptorSetCount = 2;
         VkDescriptorSet bindSets[] = {
                 cameraSets[Renderer.priv_activeFrame],
                 textureSet[0],
-                //vSets.sets[0][0],
-                //fSets.sets[0]->set,
-                //imageSets[0].set,
         };
         vkCmdBindDescriptorSets(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.layout, 0, descriptorSetCount, bindSets, 0, VK_NULL_HANDLE);
 
@@ -295,6 +321,11 @@ int main() {
 
         PLCore_EndFrame(RenderInstance, &Renderer, &Pipeline, &Window);
         glfwSwapBuffers(Window.window);
+
+
+
+
+
 
         fps++;
         if (clock()-timer > 1000) {

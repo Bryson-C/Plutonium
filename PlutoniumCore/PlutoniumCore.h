@@ -217,10 +217,12 @@ PLCore_Buffer           PLCore_CreateBuffer(PLCore_RenderInstance instance, VkDe
 PLCore_Buffer           PLCore_CreateGPUBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage, void* data);
 VkCommandBuffer         PLCore_ActiveRenderBuffer(PLCore_Renderer renderer);
 
-
 void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window);
 void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window);
 
+void PLCore_RecordCommandBuffer(VkCommandBuffer buffer);
+void PLCore_StopCommandBuffer(VkCommandBuffer buffer);
+void PLCore_SubmitCommandBuffer(VkCommandBuffer buffer, VkQueue queue, VkSemaphore* wait, VkSemaphore* signal, VkFence fence);
 
 PLCore_PipelineBuilder PLCore_Priv_CreateBlankPipelineBuilder();
 void PLCore_Priv_AddShadersToPipelineBuilder(PLCore_PipelineBuilder* builder, uint32_t shaderCount, VkPipelineShaderStageCreateInfo* shaders);
@@ -280,29 +282,11 @@ void                        PLCore_MoveDynamicBufferVertices(PLCore_DynamicVerte
 void                        PLCore_MoveDynamicBufferVerticesTo(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset);
 
 
-/*
-
-VkDescriptorSetLayoutBinding PLCore_Priv_CreateDescriptorLayoutBinding(uint32_t slot, VkDescriptorType type, uint32_t descriptorCount, VkShaderStageFlagBits stages);
-VkDescriptorSetLayout PLCore_Priv_CreateDescriptorLayout(VkDevice device, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings);
-VkDescriptorPoolSize PLCore_Priv_CreateDescritorPoolSize(VkDescriptorType type, uint32_t descriptorCount);
-VkDescriptorPool PLCore_Priv_CreateDescriptorPool(VkDevice device, uint32_t sets, uint32_t poolSizeCount, VkDescriptorPoolSize* sizes);
-VkDescriptorSet* PLCore_Priv_CreateDescriptorSets(VkDevice device, uint32_t count, VkDescriptorType type, VkDescriptorSetLayout layout, VkDescriptorPool pool);
-void PLCore_Priv_WriteDescriptor(VkDevice device, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
-
-
-
-PLCore_DescriptorPool PLCore_CreateDescriptorPoolDetailed(PLCore_RenderInstance instance, uint32_t maxSets, uint32_t sizeCount, VkDescriptorPoolSize* sizes);
-PLCore_DescriptorPool PLCore_CreateDescriptorPool(PLCore_RenderInstance instance, VkDescriptorType typeFlags, uint32_t maxDescriptorAllocations);
-PLCore_Descriptor PLCore_CreateDescriptorFromPool(PLCore_RenderInstance instance, PLCore_DescriptorPool* pool, uint32_t descriptorCount, VkDescriptorType type, uint32_t slot, uint32_t maxBoundAtOnce, VkShaderStageFlagBits stage);
-void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
-
-*/
-
-
 PLCore_Image PLCore_CreateImage(VkDevice device, VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlagBits usage, uint32_t queueFamilyIndex, VkPhysicalDeviceMemoryProperties memoryProperties);
 void PLCore_DestroyImage(VkDevice device, PLCore_Image image);
 void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, uint32_t queueFamily, VkExtent3D extent, VkCommandBuffer commandBuffer, VkFence* waitFence, VkQueue submitQueue);
 PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, const char* path);
+
 VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode);
 
 typedef struct {

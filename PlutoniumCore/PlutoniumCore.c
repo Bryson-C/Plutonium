@@ -960,6 +960,7 @@ void PLCore_UploadDataToBuffer(VkDevice device, VkDeviceMemory* memory, VkDevice
     vkUnmapMemory(device, *memory);
 }
 
+
 static void BeginFrameRecording(VkCommandBuffer buffer, VkRenderPass renderPass, VkFramebuffer framebuffer, VkRect2D scissor, uint32_t clearCount, VkClearValue* clears) {
     VkRenderPassBeginInfo beginfo;
     beginfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1130,7 +1131,6 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
 }
 
 
-
 static void PLCore_DestroyRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_Window* window) {
     vkDeviceWaitIdle(instance.pl_device.device);
 
@@ -1169,6 +1169,47 @@ static void PLCore_CreateRenderObjects(PLCore_RenderInstance instance, PLCore_Re
 static void PLCore_RecreateRenderObjects(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
     PLCore_DestroyRenderObjects(instance, renderer, window);
     PLCore_CreateRenderObjects(instance, renderer, window);
+}
+
+void PLCore_RecordCommandBuffer(VkCommandBuffer buffer) {
+    VkCommandBufferBeginInfo beginfo;
+    beginfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginfo.pNext = VK_NULL_HANDLE;
+    beginfo.flags = 0;
+    beginfo.pInheritanceInfo = VK_NULL_HANDLE;
+
+    vkBeginCommandBuffer(buffer, &beginfo);
+}
+void PLCore_StopCommandBuffer(VkCommandBuffer buffer) {
+    vkEndCommandBuffer(buffer);
+}
+void PLCore_SubmitCommandBuffer(VkCommandBuffer buffer, VkQueue queue, VkSemaphore* wait, VkSemaphore* signal, VkFence fence) {
+    VkSubmitInfo submitInfo;
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = VK_NULL_HANDLE;
+    if (wait != VK_NULL_HANDLE) {
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = wait;
+    }
+    else {
+        submitInfo.waitSemaphoreCount = 0;
+        submitInfo.pWaitSemaphores = VK_NULL_HANDLE;
+    }
+
+    if (signal != VK_NULL_HANDLE) {
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = signal;
+    } else {
+        submitInfo.signalSemaphoreCount = 0;
+        submitInfo.pSignalSemaphores = VK_NULL_HANDLE;
+    }
+
+    submitInfo.pWaitDstStageMask = VK_NULL_HANDLE;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &buffer;
+
+
+    vkQueueSubmit(queue, 1, &submitInfo, fence);
 }
 
 
@@ -1218,7 +1259,6 @@ void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer
     clears[1].depthStencil.depth = 1.0f;
     clears[1].depthStencil.stencil = 0;
 
-
     BeginFrameRecording(renderer->graphicsPool.buffers[renderer->priv_imageIndex], renderer->renderPass, renderer->framebuffers[renderer->priv_imageIndex], scissor, 2, clears);
     vkCmdSetViewport(renderer->graphicsPool.buffers[renderer->priv_imageIndex], 0, 1, &window->viewport);
     vkCmdSetScissor(renderer->graphicsPool.buffers[renderer->priv_imageIndex], 0, 1, &window->renderArea);
@@ -1257,7 +1297,7 @@ void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, 
         PLCore_RecreateRenderObjects(instance, renderer, pipeline, window);
     }
 
-    renderer->priv_activeFrame = (renderer->priv_activeFrame+1)%renderer->backBuffers;
+    (*renderer).priv_activeFrame = (renderer->priv_activeFrame+1)%renderer->backBuffers;
 }
 
 VkCommandBuffer PLCore_ActiveRenderBuffer(PLCore_Renderer renderer) {
@@ -1289,8 +1329,18 @@ PLCore_Vertex*              PLCore_PushVerticesToDynamicVertexBuffer(PLCore_Dyna
     (*buffer).dataChanged = 1;
     return vertices;
 }
-PLCore_Buffer               PLCore_RequestDynamicVertexBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicVertexBuffer * buffer, VkBufferUsageFlagBits usage, size_t elementSize) {
+PLCore_Buffer               PLCore_RequestDynamicVertexBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicVertexBuffer* buffer, VkBufferUsageFlagBits usage, size_t elementSize) {
+    // These Free Statements Throw A Runtime Error,
+    // My Best Guess Is Because The Memory Is Being Used And Isnt Being Re-assigned Into The Right Address
+    // Or That The GPU Doesnt Know The Memory Has Changed
+    if ((*buffer).buffer.memory != VK_NULL_HANDLE) {
+        vkFreeMemory(instance.pl_device.device, (*buffer).buffer.memory, VK_NULL_HANDLE);
+    }
+    if ((*buffer).buffer.buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(instance.pl_device.device, (*buffer).buffer.buffer, VK_NULL_HANDLE);
+    }
     (*buffer).buffer = PLCore_CreateGPUBuffer(instance, elementSize * buffer->dataSize, usage, buffer->data);
+
     (*buffer).dataChanged = 0;
     return buffer->buffer;
 }
@@ -1657,9 +1707,11 @@ PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Rende
     texture.imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     vkDestroyBuffer(instance.pl_device.device, stagingBuffer.buffer, VK_NULL_HANDLE);
+
     PLCORE_TIME()
     return texture;
 }
+
 
 VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode) {
     VkSampler sampler;

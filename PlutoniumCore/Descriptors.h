@@ -50,7 +50,7 @@ typedef struct {
 } PLCore_DescriptorSet;
 
 typedef struct {
-
+    void* nulldata;
 } PLCore_Priv_DescriptorReflectionData;
 
 
