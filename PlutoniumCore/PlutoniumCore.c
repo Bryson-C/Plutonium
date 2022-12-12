@@ -535,7 +535,7 @@ VkFramebuffer PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2D resoluti
 }
 
 
-PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevice device, const char* path, VkShaderStageFlagBits stage, const char* entryPoint) {
+PLCore_ShaderModule PLCore_CreateShader(PLCore_RenderInstance instance, const char* path, VkShaderStageFlagBits stage, const char* entryPoint, VkDescriptorPool allocationPool) {
     PLCore_ShaderModule shader;
     shader.path = path;
     shader.entryPoint = entryPoint;
@@ -557,11 +557,9 @@ PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevic
     shaderInfo.codeSize = shader.size;
     shaderInfo.pCode = (uint32_t*)shader.buffer;
 
-    shader.result = vkCreateShaderModule(device, &shaderInfo, VK_NULL_HANDLE, &shader.module);
+    shader.result = vkCreateShaderModule(instance.pl_device.device, &shaderInfo, VK_NULL_HANDLE, &shader.module);
 
-    #ifdef PLCORE_REFLECTION
-        shader.reflectionModuleResult = spvReflectCreateShaderModule(shader.size, shader.buffer, &shader.reflectionModule);
-    #endif
+    shader.descriptorSets = PLCore_CreateDescriptorSetFromShader(instance, shader, allocationPool, &shader.descriptorSetCount);
 
     return shader;
 }
@@ -1010,9 +1008,9 @@ PLCore_RenderInstance PLCore_CreateRenderingInstance() {
 
     return renderInstance;
 }
-PLCore_Window PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t height) {
+PLCore_Window PLCore_CreateWindow(PLCore_RenderInstance instance, uint32_t width, uint32_t height) {
     PLCore_Window window;
-    window.window = PLCore_Priv_CreateWindow(instance, width, height, &window.surface);
+    window.window = PLCore_Priv_CreateWindow(instance.pl_instance.instance, width, height, &window.surface);
     window.resolution = (VkExtent2D){.width = width, .height = height};
     window.viewport = (VkViewport){
             .width = (float)width,
@@ -1238,6 +1236,13 @@ PLCore_Buffer PLCore_CreateGPUBuffer(PLCore_RenderInstance instance, VkDeviceSiz
     vkFreeCommandBuffers(instance.pl_device.device, instance.pl_transferPool.pool, 1, &cmdBuffer);
     return pl_buffer;
 }
+PLCore_Buffer PLCore_CreateUniformBuffer(PLCore_RenderInstance instance, VkDeviceSize size) {
+    return PLCore_CreateBuffer(instance, size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, (VkMemoryPropertyFlagBits)(CPU_VISIBLE | CPU_COHERENT));
+}
+void PLCore_DestroyBuffer(PLCore_RenderInstance instance, PLCore_Buffer* buffer) {
+    vkDestroyBuffer(instance.pl_device.device, (*buffer).buffer, VK_NULL_HANDLE);
+    vkFreeMemory(instance.pl_device.device, (*buffer).memory, VK_NULL_HANDLE);
+}
 
 void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
     VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer->swapchain, UINT64_MAX, renderer->priv_waitSemaphores[renderer->priv_activeFrame], VK_NULL_HANDLE, &(*renderer).priv_imageIndex);
@@ -1303,68 +1308,6 @@ void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, 
 VkCommandBuffer PLCore_ActiveRenderBuffer(PLCore_Renderer renderer) {
     return renderer.graphicsPool.buffers[renderer.priv_imageIndex];
 }
-
-
-PLCore_DynamicVertexBuffer  PLCore_CreateDynamicVertexBuffer() {
-    PLCore_DynamicVertexBuffer buffer = {
-            .buffer = {VK_NULL_HANDLE, VK_NULL_HANDLE},
-            .data = VK_NULL_HANDLE,
-            .dataCount = 0,
-            .dataSize = 100,
-            .dataChanged = 0,
-    };
-    return buffer;
-}
-PLCore_Vertex*              PLCore_PushVerticesToDynamicVertexBuffer(PLCore_DynamicVertexBuffer* buffer, size_t elementSize, size_t elementCount, PLCore_Vertex* data) {
-    if (buffer->data == VK_NULL_HANDLE)
-        (*buffer).data = malloc(elementSize * buffer->dataSize);
-    if (buffer->dataCount+elementCount >= buffer->dataSize) {
-        (*buffer).data = realloc((*buffer).data, elementSize * ((*buffer).dataSize *= 2));
-    }
-
-    size_t bufferOffset = buffer->dataCount;
-    memcpy_s((buffer->data)+bufferOffset, buffer->dataSize * elementSize, data, elementSize * elementCount);
-    PLCore_Vertex* vertices = buffer->data+buffer->dataCount;
-    (*buffer).dataCount += elementCount;
-    (*buffer).dataChanged = 1;
-    return vertices;
-}
-PLCore_Buffer               PLCore_RequestDynamicVertexBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicVertexBuffer* buffer, VkBufferUsageFlagBits usage, size_t elementSize) {
-    // These Free Statements Throw A Runtime Error,
-    // My Best Guess Is Because The Memory Is Being Used And Isnt Being Re-assigned Into The Right Address
-    // Or That The GPU Doesnt Know The Memory Has Changed
-    if ((*buffer).buffer.memory != VK_NULL_HANDLE) {
-        vkFreeMemory(instance.pl_device.device, (*buffer).buffer.memory, VK_NULL_HANDLE);
-    }
-    if ((*buffer).buffer.buffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(instance.pl_device.device, (*buffer).buffer.buffer, VK_NULL_HANDLE);
-    }
-    (*buffer).buffer = PLCore_CreateGPUBuffer(instance, elementSize * buffer->dataSize, usage, buffer->data);
-
-    (*buffer).dataChanged = 0;
-    return buffer->buffer;
-}
-void                        PLCore_ClearDynamicVertexBufferData(PLCore_DynamicVertexBuffer* buffer) {
-    free((*buffer).data);
-    *buffer = PLCore_CreateDynamicVertexBuffer();
-}
-void                        PLCore_MoveDynamicBufferVertices(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset) {
-    if (vertices == VK_NULL_HANDLE) return;
-    (*buffer).dataChanged = 1;
-    for (size_t i = 0; i < vertexCount; i++) {
-        (*(vertices+i)).xyz[0] += xOffset;
-        (*(vertices+i)).xyz[1] += yOffset;
-    }
-}
-void                        PLCore_MoveDynamicBufferVerticesTo(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset) {
-    if (vertices == VK_NULL_HANDLE) return;
-    (*buffer).dataChanged = 1;
-    for (size_t i = 0; i < vertexCount; i++) {
-        (*(vertices+i)).xyz[0] = xOffset;
-        (*(vertices+i)).xyz[1] = yOffset;
-    }
-}
-
 
 
 
@@ -1624,7 +1567,7 @@ void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, ui
     vkQueueSubmit(submitQueue, 1, &submitInfo, *waitFence);
 }
 
-#define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
 
@@ -1713,8 +1656,8 @@ PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Rende
 }
 
 
-VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode) {
-    VkSampler sampler;
+PLCore_ImageSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode) {
+    PLCore_ImageSampler sampler;
 
     VkSamplerCreateInfo samplerInfo;
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -1738,7 +1681,10 @@ VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddres
     samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;
 
-    vkCreateSampler(device, &samplerInfo, VK_NULL_HANDLE, &sampler);
+    vkCreateSampler(device, &samplerInfo, VK_NULL_HANDLE, &sampler.sampler);
+    sampler.samplerInfo.sampler = sampler.sampler;
+    sampler.samplerInfo.imageView = VK_NULL_HANDLE;
+    sampler.samplerInfo.imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     return sampler;
 }
 
@@ -1806,151 +1752,674 @@ void PLCore_PollCameraMovements(PLCore_Window window, PLCore_CameraUniform* came
 }
 
 
-#ifdef PLCORE_REFLECTION
 
-static const char* descriptorTypeToString(VkDescriptorType type) {
-    if (type == VK_DESCRIPTOR_TYPE_SAMPLER) return "Sampler";
-    if (type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) return "Combined Image Sampler";
-    if (type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) return "Sampled Image";
-    if (type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) return "Storage Image";
-    if (type == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) return "Uniform Texel Buffer";
-    if (type == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER) return "Storage Texel Buffer";
-    if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) return "Uniform Buffer";
-    if (type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) return "Storage Buffer";
-    if (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) return "Dynamic Uniform Buffer";
-    if (type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) return "Dynamic Storage Buffer";
-    if (type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT) return "Input Attachment";
-    return "";
+
+// `types` Needs To Be An Array
+// `descriptorSetCount` Needs To Be An Array
+// `count` Specifies How Large The `descriptorSetCount` and `types` Array Are: `descriptorSetCount` and `types` Should Be The Same Size
+
+_CRT_DEPRECATE_TEXT("Prefer Other Function")
+PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t descriptorSlot, VkDescriptorType* types, uint32_t* descriptorSetCount, uint32_t count, uint32_t maxDescriptorSets, VkShaderStageFlagBits shaderStage) {
+
+    static const uint32_t DESCRIPTOR_ALLOC_COUNT_PADDING = 5;
+    VkDescriptorPoolSize* sizes = (VkDescriptorPoolSize*)malloc(sizeof(VkDescriptorPoolSize) * count);
+    VkDescriptorSetLayoutBinding* bindings = (VkDescriptorSetLayoutBinding*)malloc(sizeof(VkDescriptorSetLayoutBinding) * count);
+
+    for (int i = 0; i < count; i++) {
+        sizes[i].descriptorCount = (descriptorSetCount[i] + DESCRIPTOR_ALLOC_COUNT_PADDING);
+        sizes[i].type = types[i];
+
+        bindings[i].binding = descriptorSlot;
+        bindings[i].descriptorType = types[i];
+        bindings[i].descriptorCount = descriptorSetCount[i];
+        bindings[i].stageFlags = (VkShaderStageFlags)shaderStage;
+        bindings[i].pImmutableSamplers = VK_NULL_HANDLE;
+    }
+
+    PLCore_DescriptorPoolAllocator poolAllocator;
+    poolAllocator.sizes = sizes;
+    poolAllocator.poolSizeCount = count;
+    poolAllocator.bindings = bindings;
+    poolAllocator.bindingCount = count;
+    poolAllocator.types = types;
+    poolAllocator.typeCount = count;
+    poolAllocator.maxDescriptorSets = maxDescriptorSets;
+
+    return poolAllocator;
 }
 
-SpvReflectDescriptorSet** PLCore_ShaderReflectDescriptorSets(PLCore_ShaderModule shaderModule, uint32_t* count) {
-    uint32_t descriptorCount = 0;
-    SpvReflectResult descriptorResults = spvReflectEnumerateDescriptorSets(&shaderModule.reflectionModule, &descriptorCount,VK_NULL_HANDLE);
-    if (descriptorResults != SPV_REFLECT_RESULT_SUCCESS) fprintf(stderr, "Error (stupid nerd)\n");
 
-    SpvReflectDescriptorSet** sets = (SpvReflectDescriptorSet**) malloc(sizeof(SpvReflectInterfaceVariable*) * descriptorCount);
-    descriptorResults = spvReflectEnumerateDescriptorSets(&shaderModule.reflectionModule, &descriptorCount, sets);
-
-    if (descriptorResults != SPV_REFLECT_RESULT_SUCCESS) fprintf(stderr, "Error (stupid nerd)\n");
-
-    if (count != VK_NULL_HANDLE) *count = descriptorCount;
-    return sets;
-}
-void PLCore_Priv_PrintReflectionDescriptorSets(SpvReflectDescriptorSet** sets, uint32_t setCount) {
-    for (int i = 0; i < setCount; i++) {
-        printf("Shader Descriptor Set %i: \n", sets[i]->set);
-        for (int j = 0; j < sets[i]->binding_count; j++) {
-            printf("\tBinding %i: \n", j);
-            printf("\t\tName: %s\n", sets[i]->bindings[j]->name);
-            printf("\t\tSet: %i\n", sets[i]->bindings[j]->set);
-            printf("\t\tType: %s\n", descriptorTypeToString((VkDescriptorType)sets[i]->bindings[j]->descriptor_type));
-        }
-    }
-}
-
-SpvReflectInterfaceVariable** PLCore_ShaderReflectInputVariables(PLCore_ShaderModule shaderModule, uint32_t* count) {
-    uint32_t variableCount = 0;
-    SpvReflectResult inpVarResult = spvReflectEnumerateInputVariables(&shaderModule.reflectionModule, &variableCount, VK_NULL_HANDLE);
-    if (inpVarResult != SPV_REFLECT_RESULT_SUCCESS)
-        fprintf(stderr, "Oopsy Doopsy. Failed Enumerating Shader Variables: Code %i\n", inpVarResult);
-
-    SpvReflectInterfaceVariable** inputVars = (SpvReflectInterfaceVariable**)malloc(variableCount * sizeof(SpvReflectInterfaceVariable*));
-    inpVarResult = spvReflectEnumerateInputVariables(&shaderModule.reflectionModule, &variableCount, inputVars);
-    if (inpVarResult != SPV_REFLECT_RESULT_SUCCESS)
-        fprintf(stderr, "Oopsy Doopsy. Failed Enumerating Shader Variables: Code %i\n", inpVarResult);
-
-    for (uint32_t i = 0; i < variableCount; i++) {
-        SpvReflectInterfaceVariable var = (*inputVars)[i];
-        printf("Input Variable %i: %s\n", var.location, var.name);
-    }
-    if (count != VK_NULL_HANDLE) *count = variableCount;
-    return inputVars;
-}
-SpvReflectBlockVariable** PLCore_ShaderReflectPushConstants(PLCore_ShaderModule shaderModule, uint32_t* count) {
-    uint32_t pushCount = 0;
-    SpvReflectResult result = spvReflectEnumeratePushConstantBlocks(&shaderModule.reflectionModule, &pushCount, VK_NULL_HANDLE);
-    if (result != SPV_REFLECT_RESULT_SUCCESS)
-        fprintf(stderr, "Error\n");
-
-    SpvReflectBlockVariable** pushConstants = (SpvReflectBlockVariable**)malloc(pushCount * sizeof(SpvReflectBlockVariable*));
-    result = spvReflectEnumeratePushConstantBlocks(&shaderModule.reflectionModule, &pushCount, pushConstants);
-    if (result != SPV_REFLECT_RESULT_SUCCESS)
-        fprintf(stderr, "Error\n");
-
-    if (count != VK_NULL_HANDLE) *count = pushCount;
-    return pushConstants;
-}
-/*
-VkPipelineLayout PLCore_CreatePipelineLayoutFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule* shaderModules, uint32_t shaderCount, PLCore_Descriptor** descriptorLayouts, VkDescriptorPool* pool) {
-
-    uint32_t pushConstantCount = 0;
-    for (int i = 0; i < shaderCount; i++) {
-        uint32_t count = 0;
-        spvReflectEnumeratePushConstantBlocks(&shaderModules[i].reflectionModule, &count, VK_NULL_HANDLE);
-        pushConstantCount += count;
-    }
-    VkPushConstantRange* ranges = malloc(sizeof(VkPushConstantRange) * pushConstantCount);
-    int currentPushConstant = 0;
-    for (int i = 0; i < shaderCount; i++) {
-        uint32_t count = 0;
-        SpvReflectBlockVariable** pushConstants = PLCore_ShaderReflectPushConstants(shaderModules[i], &count);
-        for (int j = 0; j < count; i++) {
-            ranges[j].size = pushConstants[currentPushConstant]->size;
-            ranges[j].offset = pushConstants[currentPushConstant]->offset;
-            ranges[j].stageFlags = shaderModules[i].stage;
-            currentPushConstant++;
-        }
-    }
-
-    uint32_t descriptorCount = 0;
-    for (int i = 0; i < shaderCount; i++) {
-        uint32_t count = 0;
-        spvReflectEnumerateDescriptorSets(&shaderModules[i].reflectionModule, &count, VK_NULL_HANDLE);
-        descriptorCount += count;
-    }
-    VkDescriptorSetLayout* layouts = malloc(sizeof(VkDescriptorSetLayout) * descriptorCount);
-    VkDescriptorSet* sets = malloc(sizeof(VkDescriptorSet) * descriptorCount);
-    int currentLayout = 0;
-    for (int i = 0; i < shaderCount; i++) {
-        uint32_t count = 0;
-        SpvReflectDescriptorSet** descriptorSets = PLCore_ShaderReflectDescriptorSets(shaderModules[i], &count);
-        for (int j = 0; j < count; i++) {
-            VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * (*descriptorSets)[i].binding_count);
-            VkDescriptorPoolSize* sizes = malloc(sizeof(VkDescriptorPoolSize) * descriptorSets[j]->binding_count);
-            VkDescriptorType types = 0;
-            for (int k = 0; k < descriptorSets[j]->binding_count; k++) {
-                bindings[k] = PLCore_Priv_CreateDescriptorLayoutBinding(descriptorSets[j]->bindings[k]->set,
-                                                                        (VkDescriptorType)descriptorSets[j]->bindings[k]->descriptor_type,
-                                                                        descriptorSets[j]->bindings[k]->count,
-                                                                        shaderModules[i].stage);
-                sizes[k] = PLCore_Priv_CreateDescritorPoolSize((VkDescriptorType)descriptorSets[j]->bindings[k]->descriptor_type, descriptorSets[j]->bindings[k]->count);
-                types += (VkDescriptorType)descriptorSets[j]->bindings[k]->descriptor_type;
-            }
-            *pool = PLCore_Priv_CreateDescriptorPool(instance.pl_device.device, descriptorCount, types, descriptorSets[j]->binding_count, sizes);
-            layouts[currentLayout++] = PLCore_Priv_CreateDescriptorLayout(instance.pl_device.device, descriptorSets[j]->binding_count, bindings);
-            //PLCore_Priv_CreateDescriptorSets(instance.pl_device.device, descriptorSets[j]->set, types, );
-        }
-    }
-
-
-    VkPipelineLayoutCreateInfo info = {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+_CRT_DEPRECATE_TEXT("Prefer Other Function")
+PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolFromAllocator(VkDevice device, PLCore_DescriptorPoolAllocator allocator) {
+    VkDescriptorPoolCreateInfo info = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .pNext = VK_NULL_HANDLE,
             .flags = 0,
-            .pushConstantRangeCount = pushConstantCount,
-            .pPushConstantRanges = (pushConstantCount > 0) ? ranges : VK_NULL_HANDLE,
-            .setLayoutCount = descriptorCount,
-            .pSetLayouts = (descriptorCount > 0) ? layouts : VK_NULL_HANDLE,
+            .maxSets = allocator.maxDescriptorSets,
+            .poolSizeCount = allocator.poolSizeCount,
+            .pPoolSizes = allocator.sizes,
     };
-    //if (descriptorLayouts != VK_NULL_HANDLE) *(*descriptorLayouts) = *layouts;
+    vkCreateDescriptorPool(device, &info, VK_NULL_HANDLE, &allocator.pool);
+    // This Returns A Local Copy
+    // It Does This So You Can Chain Functions Together
+    // Problems:
+    //      If You Expect The Function To Return Nothing The Allocator Will Be Invalid For Creaing Descriptor Sets
+    return allocator;
+}
 
 
-    VkPipelineLayout layout;
-    vkCreatePipelineLayout(instance.pl_device.device, &info, VK_NULL_HANDLE, &layout);
-    return layout;
+_CRT_DEPRECATE_TEXT("Prefer Other Function")
+PLCore_DescriptorSet PLCore_CreateDescriptorSets(VkDevice device, VkDescriptorType typeFlags, PLCore_DescriptorPoolAllocator allocator) {
+
+    // Setting This To 20 Because I Dont Really Know What Else To Set It To
+    // Binding Counts Should Really Never Be Over 3 (In My Mind)
+    const uint32_t MAX_BINDINGS = 20;
+
+    uint32_t bindingCount = 0;
+    VkDescriptorSetLayoutBinding* bindings = (VkDescriptorSetLayoutBinding*)malloc(sizeof(VkDescriptorSetLayoutBinding) * MAX_BINDINGS);
+
+
+    // Search Through The Allocators Bindings To Find The Correct Descriptor Type
+    for (int i = 0; i < allocator.bindingCount; i++) {
+        if (allocator.types[i] & typeFlags) {
+            bindings[i] = allocator.bindings[i];
+            bindingCount++;
+        }
+    }
+
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .pNext = VK_NULL_HANDLE,
+            .flags = 0,
+            .bindingCount = bindingCount,
+            .pBindings = bindings,
+    };
+    VkDescriptorSetLayout layout;
+    vkCreateDescriptorSetLayout(device, &layoutInfo, VK_NULL_HANDLE, &layout);
+
+    VkDescriptorSetAllocateInfo allocInfo;
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.pNext = VK_NULL_HANDLE;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &layout;
+    allocInfo.descriptorPool = allocator.pool;
+
+    VkDescriptorSet set;
+    vkAllocateDescriptorSets(device, &allocInfo, &set);
+
+    PLCore_DescriptorSet descriptorSet;
+    descriptorSet.set = set;
+    descriptorSet.layout = layout;
+
+    return descriptorSet;
+}
+
+void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
+    VkWriteDescriptorSet write;
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.pNext = VK_NULL_HANDLE;
+    write.dstSet = set;
+    write.dstBinding = dstBinding;
+    write.dstArrayElement = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = type;
+    write.pImageInfo = imageInfo;
+    write.pBufferInfo = bufferInfo;
+    write.pTexelBufferView = VK_NULL_HANDLE;
+
+    vkUpdateDescriptorSets(instance.pl_device.device, 1, &write, 0, VK_NULL_HANDLE);
+}
+
+/*
+PLCore_ReflectedDescriptorSet scanShaders(PLCore_RenderInstance instance, PLCore_ShaderModule module) {
+    PLCore_ReflectedDescriptorSet reflectedSets;
+
+
+    SpvReflectShaderModule mod;
+    spvReflectCreateShaderModule(module.size, module.buffer, &mod);
+
+    uint32_t descriptorCount = 0;
+    spvReflectEnumerateDescriptorSets(&mod, &descriptorCount, VK_NULL_HANDLE);
+    SpvReflectDescriptorSet** descriptorSets = malloc(sizeof(SpvReflectDescriptorSet*) * descriptorCount);
+    spvReflectEnumerateDescriptorSets(&mod, &descriptorCount, descriptorSets);
+    reflectedSets.descriptorSetCount = malloc(sizeof(uint32_t) * descriptorCount);
+    reflectedSets.sets = malloc(sizeof(VkDescriptorSet) * descriptorCount);
+
+    const uint32_t DESCRIPTORS_PER_TYPE = 25;
+    VkDescriptorPoolSize sizes[11] = {
+            {VK_DESCRIPTOR_TYPE_SAMPLER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, DESCRIPTORS_PER_TYPE},
+    };
+    VkDescriptorPoolCreateInfo poolInfo;
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.pNext = VK_NULL_HANDLE;
+    poolInfo.flags = 0;
+    poolInfo.poolSizeCount = 11;
+    poolInfo.pPoolSizes = sizes;
+    // Descriptor Types * DESCRIPTORS_PER_TYPE
+    poolInfo.maxSets = 11 * DESCRIPTORS_PER_TYPE;
+
+    VkDescriptorPool pool;
+    PLCORE_RESULT("Descriptor Pool Creation", vkCreateDescriptorPool(instance.pl_device.device, &poolInfo, VK_NULL_HANDLE, &pool));
+    reflectedSets.pool = pool;
+
+    for (int set = 0; set < descriptorCount; set++) {
+        printf("Set: %u/%u\n", descriptorSets[set]->set+1, descriptorCount);
+        reflectedSets.sets[set].bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * descriptorSets[set]->binding_count);
+        reflectedSets.sets[set].bindingCount = descriptorSets[set]->binding_count;
+        for (int binding = 0; binding < descriptorSets[set]->binding_count; binding++) {
+
+            printf("\tBinding: \"%s\"\n", descriptorSets[set]->bindings[binding]->name);
+            printf("\tType: %u\n", descriptorSets[set]->bindings[binding]->descriptor_type);
+
+            reflectedSets.sets[set].bindings[binding].binding = descriptorSets[set]->bindings[binding]->binding;
+            reflectedSets.sets[set].bindings[binding].descriptorCount = descriptorSets[set]->bindings[binding]->count;
+            reflectedSets.sets[set].bindings[binding].descriptorType = (VkDescriptorType)descriptorSets[set]->bindings[binding]->descriptor_type;
+            reflectedSets.sets[set].bindings[binding].pImmutableSamplers = VK_NULL_HANDLE;
+            reflectedSets.sets[set].bindings[binding].stageFlags = module.stage;
+
+
+        }
+        printf("\tBinding Count: %u\n", descriptorSets[set]->binding_count);
+
+        VkDescriptorSetLayout layout;
+        VkDescriptorSetLayoutCreateInfo layoutInfo;
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.pNext = VK_NULL_HANDLE;
+        layoutInfo.flags = 0;
+        layoutInfo.bindingCount = reflectedSets.sets[0].bindingCount;
+        layoutInfo.pBindings = reflectedSets.sets[0].bindings;
+        //PLCORE_RESULT("Descriptor Layout Creation", vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, &layout));
+        vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, &layout);
+
+
+        VkDescriptorSetAllocateInfo allocInfo;
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.pNext = VK_NULL_HANDLE;
+        allocInfo.descriptorPool = reflectedSets.pool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &layout;
+
+        VkDescriptorSet descriptorSet;
+        //PLCORE_RESULT("Descriptor Allocation Result", vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, &descriptorSet));
+        vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, &descriptorSet);
+
+        reflectedSets.descriptorSetCount[set] = 1;
+        reflectedSets.sets[set].set = descriptorSet;
+        reflectedSets.sets[set].layout = layout;
+        reflectedSets.sets[set].slot = descriptorSets[set]->set;
+
+        printf("Check Set Setter\n");
+
+        VkWriteDescriptorSet write;
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.pNext = VK_NULL_HANDLE;
+        write.dstSet = reflectedSets.sets[set].set;
+        write.dstBinding = 0;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write.pImageInfo = VK_NULL_HANDLE;
+        write.pBufferInfo = VK_NULL_HANDLE;
+        write.pTexelBufferView = VK_NULL_HANDLE;
+
+        reflectedSets.sets[set].write = write;
+
+        printf("Check Write Setter\n");
+    }
+    return reflectedSets;
+}
+
+static PLCore_EXP_shaderDescriptors PLCore_EXP_newShaderDescriptor(uint32_t descriptorCount) {
+    PLCore_EXP_shaderDescriptors descriptor;
+    descriptor.descriptorCount = malloc(sizeof(uint32_t) * descriptorCount);
+    descriptor.sets = malloc(sizeof(VkDescriptorSet**) * descriptorCount);
+    descriptor.layouts = malloc(sizeof(VkDescriptorSetLayout**) * descriptorCount);
+    descriptor.write = malloc(sizeof(VkWriteDescriptorSet) * descriptorCount);
+    return descriptor;
+}
+
+PLCore_EXP_shaderDescriptors PLCore_EXP_ReflectShader(PLCore_RenderInstance instance, PLCore_ShaderModule module) {
+
+
+
+    SpvReflectShaderModule mod;
+    spvReflectCreateShaderModule(module.size, module.buffer, &mod);
+
+    uint32_t descriptorCount = 0;
+    spvReflectEnumerateDescriptorSets(&mod, &descriptorCount, VK_NULL_HANDLE);
+    SpvReflectDescriptorSet** descriptorSets = malloc(sizeof(SpvReflectDescriptorSet*) * descriptorCount);
+    spvReflectEnumerateDescriptorSets(&mod, &descriptorCount, descriptorSets);
+
+    const uint32_t DESCRIPTORS_PER_TYPE = 25;
+    VkDescriptorPoolSize sizes[11] = {
+            {VK_DESCRIPTOR_TYPE_SAMPLER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, DESCRIPTORS_PER_TYPE},
+    };
+    VkDescriptorPoolCreateInfo poolInfo;
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.pNext = VK_NULL_HANDLE;
+    poolInfo.flags = 0;
+    poolInfo.poolSizeCount = 11;
+    poolInfo.pPoolSizes = sizes;
+    // Descriptor Types * DESCRIPTORS_PER_TYPE
+    poolInfo.maxSets = 11 * DESCRIPTORS_PER_TYPE;
+
+    VkDescriptorPool pool;
+    PLCORE_RESULT("Descriptor Pool Creation", vkCreateDescriptorPool(instance.pl_device.device, &poolInfo, VK_NULL_HANDLE, &pool));
+
+    PLCore_EXP_shaderDescriptors descriptor =  PLCore_EXP_newShaderDescriptor(descriptorCount);
+
+    for (int set = 0; set < descriptorCount; set++) {
+        VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * descriptorSets[set]->binding_count);
+        for (int binding = 0; binding < descriptorSets[set]->binding_count; binding++) {
+            bindings[binding].binding = descriptorSets[set]->bindings[binding]->binding;
+            bindings[binding].descriptorCount = descriptorSets[set]->bindings[binding]->count;
+            bindings[binding].descriptorType = (VkDescriptorType)descriptorSets[set]->bindings[binding]->descriptor_type;
+            bindings[binding].pImmutableSamplers = VK_NULL_HANDLE;
+            bindings[binding].stageFlags = module.stage;
+        }
+
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo;
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.pNext = VK_NULL_HANDLE;
+        layoutInfo.flags = 0;
+        layoutInfo.bindingCount = descriptorSets[set]->binding_count;
+        layoutInfo.pBindings = bindings;
+        //PLCORE_RESULT("Descriptor Layout Creation", vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, &layout));
+        vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, &(descriptor.layouts[set][0]));
+
+
+        VkDescriptorSetAllocateInfo allocInfo;
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.pNext = VK_NULL_HANDLE;
+        allocInfo.descriptorPool = pool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &descriptor.layouts[set][0];
+
+        VkDescriptorSet descriptorSet;
+        //PLCORE_RESULT("Descriptor Allocation Result", vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, &descriptorSet));
+        vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, &descriptorSet);
+
+        descriptor.sets[set][0] = descriptorSet;
+        descriptor.descriptorCount[set] = 1;
+
+        printf("Check Set Setter\n");
+
+        VkWriteDescriptorSet write;
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.pNext = VK_NULL_HANDLE;
+        write.dstSet = descriptor.sets[set][0];
+        write.dstBinding = 0;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write.pImageInfo = VK_NULL_HANDLE;
+        write.pBufferInfo = VK_NULL_HANDLE;
+        write.pTexelBufferView = VK_NULL_HANDLE;
+
+        descriptor.write[set] = write;
+
+        printf("Check Write Setter\n");
+    }
+    return descriptor;
 }
 */
-#endif
+
+//static const uint32_t
+#define DESCRIPTORS_PER_TYPE 25
+//static const uint32_t
+#define DESCRIPTORS_TYPE_COUNT 11
+VkDescriptorPool PLCore_CreateGeneralizedDescriptorPool(PLCore_RenderInstance instance) {
+    VkDescriptorPoolSize sizes[DESCRIPTORS_TYPE_COUNT] = {
+            {VK_DESCRIPTOR_TYPE_SAMPLER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, DESCRIPTORS_PER_TYPE},
+            {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, DESCRIPTORS_PER_TYPE},
+    };
+    VkDescriptorPoolCreateInfo poolInfo;
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.pNext = VK_NULL_HANDLE;
+    poolInfo.flags = 0;
+    poolInfo.poolSizeCount = 11;
+    poolInfo.pPoolSizes = sizes;
+    poolInfo.maxSets = DESCRIPTORS_TYPE_COUNT * DESCRIPTORS_PER_TYPE;
+
+    VkDescriptorPool pool;
+    vkCreateDescriptorPool(instance.pl_device.device, &poolInfo, VK_NULL_HANDLE, &pool);
+    return pool;
+}
+
+VkDescriptorSetLayoutBinding PLCore_CreateDescriptorSetLayoutBinding(uint32_t slot, uint32_t count, VkDescriptorType type, VkShaderStageFlags stage) {
+    VkDescriptorSetLayoutBinding binding;
+    binding.binding = slot;
+    binding.descriptorType = type;
+    binding.descriptorCount = count;
+    binding.stageFlags = stage;
+    binding.pImmutableSamplers = VK_NULL_HANDLE;
+    return binding;
+}
+
+VkDescriptorSet PLCore_CreateDescriptorSetAdvanced(PLCore_RenderInstance instance, VkDescriptorPool pool, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings, VkShaderStageFlags stage, VkDescriptorSetLayout* layout) {
+    VkDescriptorSetLayoutCreateInfo layoutInfo;
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.pNext = VK_NULL_HANDLE;
+    layoutInfo.flags = 0;
+    layoutInfo.bindingCount = bindingCount;
+    layoutInfo.pBindings = bindings;
+
+    if (layout == VK_NULL_HANDLE)
+        assert(1);
+
+    vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, layout);
+
+
+    VkDescriptorSetAllocateInfo allocInfo;
+    allocInfo.pNext = VK_NULL_HANDLE;
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = layout;
+    allocInfo.descriptorPool = pool;
+
+    VkDescriptorSet set;
+    vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, &set);
+
+    return set;
+}
+
+VkDescriptorSet PLCore_CreateDescriptorSet(PLCore_RenderInstance instance, VkDescriptorPool pool, uint32_t slot, VkDescriptorType type, VkShaderStageFlags stage, VkDescriptorSetLayout* layout) {
+
+    VkDescriptorSetLayoutBinding binding;
+    binding.binding = slot;
+    binding.descriptorType = type;
+    binding.descriptorCount = 1;
+    binding.stageFlags = stage;
+    binding.pImmutableSamplers = VK_NULL_HANDLE;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo;
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.pNext = VK_NULL_HANDLE;
+    layoutInfo.flags = 0;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &binding;
+    if (layout == VK_NULL_HANDLE)
+        assert(1);
+
+    vkCreateDescriptorSetLayout(instance.pl_device.device, &layoutInfo, VK_NULL_HANDLE, layout);
+
+
+    VkDescriptorSetAllocateInfo allocInfo;
+    allocInfo.pNext = VK_NULL_HANDLE;
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = layout;
+    allocInfo.descriptorPool = pool;
+
+    VkDescriptorSet set;
+    vkAllocateDescriptorSets(instance.pl_device.device, &allocInfo, &set);
+
+    return set;
+}
+
+PLCore_DescriptorSet* PLCore_CreateDescriptorSetFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule shader, VkDescriptorPool allcationPool, uint32_t* out_DescriptorCount) {
+    SpvReflectShaderModule mod;
+    spvReflectCreateShaderModule(shader.size, shader.buffer, &mod);
+
+    uint32_t descriptorCount = 0;
+    spvReflectEnumerateDescriptorSets(&mod, &descriptorCount, VK_NULL_HANDLE);
+    SpvReflectDescriptorSet** descriptorInfos = malloc(sizeof(SpvReflectDescriptorSet*) * descriptorCount);
+    spvReflectEnumerateDescriptorSets(&mod, &descriptorCount, descriptorInfos);
+
+    PLCore_DescriptorSet* sets = malloc(sizeof(PLCore_DescriptorSet) * descriptorCount);
+    if (out_DescriptorCount != VK_NULL_HANDLE)
+        *out_DescriptorCount = descriptorCount;
+
+    for (int i = 0; i < descriptorCount; i++) {
+        sets[i].slot = descriptorInfos[i]->set;
+        sets[i].writes = malloc(sizeof(VkWriteDescriptorSet) * descriptorInfos[i]->binding_count);
+        //descriptorInfos[i]; this is the set
+        VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * descriptorInfos[i]->binding_count);
+        for (int j = 0; j < descriptorInfos[i]->binding_count; j++) {
+            bindings[j].descriptorCount = descriptorInfos[i]->bindings[j]->count;
+            bindings[j].binding = descriptorInfos[i]->bindings[j]->binding;
+            bindings[j].descriptorType = (VkDescriptorType)descriptorInfos[i]->bindings[j]->descriptor_type;
+            bindings[j].pImmutableSamplers = VK_NULL_HANDLE;
+            bindings[j].stageFlags = shader.stage;
+            printf("Shader Descriptor: [\"%s\"]: Set: %i  |  Count: %i\n",
+                   descriptorInfos[i]->bindings[j]->name,
+                   descriptorInfos[i]->bindings[j]->set,
+                   descriptorInfos[i]->bindings[j]->count);
+        }
+        sets[i].set = PLCore_CreateDescriptorSetAdvanced(instance, allcationPool, descriptorInfos[i]->binding_count, bindings, shader.stage, &sets[i].layout);
+        for (int j = 0; j < descriptorInfos[i]->binding_count; j++) {
+            sets[i].writes[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            sets[i].writes[j].pNext = VK_NULL_HANDLE;
+            sets[i].writes[j].dstSet = sets[i].set;
+            sets[i].writes[j].dstBinding = bindings[j].binding;
+            sets[i].writes[j].dstArrayElement = 0;
+            sets[i].writes[j].descriptorCount = bindings[j].descriptorCount;
+            sets[i].writes[j].descriptorType = bindings[j].descriptorType;
+            sets[i].writes[j].pImageInfo = VK_NULL_HANDLE;
+            sets[i].writes[j].pBufferInfo = VK_NULL_HANDLE;
+            sets[i].writes[j].pTexelBufferView = VK_NULL_HANDLE;
+        }
+    }
+    return sets;
+}
+
+
+static bool compareAttributeDesc(const VkVertexInputAttributeDescription* a, const VkVertexInputAttributeDescription* b) {
+    return a->location > b->location;
+}
+
+static uint32_t FormatSize(VkFormat format)
+{
+    uint32_t result = 0;
+    switch (format) {
+        case VK_FORMAT_UNDEFINED: result = 0; break;
+        case VK_FORMAT_R4G4_UNORM_PACK8: result = 1; break;
+        case VK_FORMAT_R4G4B4A4_UNORM_PACK16: result = 2; break;
+        case VK_FORMAT_B4G4R4A4_UNORM_PACK16: result = 2; break;
+        case VK_FORMAT_R5G6B5_UNORM_PACK16: result = 2; break;
+        case VK_FORMAT_B5G6R5_UNORM_PACK16: result = 2; break;
+        case VK_FORMAT_R5G5B5A1_UNORM_PACK16: result = 2; break;
+        case VK_FORMAT_B5G5R5A1_UNORM_PACK16: result = 2; break;
+        case VK_FORMAT_A1R5G5B5_UNORM_PACK16: result = 2; break;
+        case VK_FORMAT_R8_UNORM: result = 1; break;
+        case VK_FORMAT_R8_SNORM: result = 1; break;
+        case VK_FORMAT_R8_USCALED: result = 1; break;
+        case VK_FORMAT_R8_SSCALED: result = 1; break;
+        case VK_FORMAT_R8_UINT: result = 1; break;
+        case VK_FORMAT_R8_SINT: result = 1; break;
+        case VK_FORMAT_R8_SRGB: result = 1; break;
+        case VK_FORMAT_R8G8_UNORM: result = 2; break;
+        case VK_FORMAT_R8G8_SNORM: result = 2; break;
+        case VK_FORMAT_R8G8_USCALED: result = 2; break;
+        case VK_FORMAT_R8G8_SSCALED: result = 2; break;
+        case VK_FORMAT_R8G8_UINT: result = 2; break;
+        case VK_FORMAT_R8G8_SINT: result = 2; break;
+        case VK_FORMAT_R8G8_SRGB: result = 2; break;
+        case VK_FORMAT_R8G8B8_UNORM: result = 3; break;
+        case VK_FORMAT_R8G8B8_SNORM: result = 3; break;
+        case VK_FORMAT_R8G8B8_USCALED: result = 3; break;
+        case VK_FORMAT_R8G8B8_SSCALED: result = 3; break;
+        case VK_FORMAT_R8G8B8_UINT: result = 3; break;
+        case VK_FORMAT_R8G8B8_SINT: result = 3; break;
+        case VK_FORMAT_R8G8B8_SRGB: result = 3; break;
+        case VK_FORMAT_B8G8R8_UNORM: result = 3; break;
+        case VK_FORMAT_B8G8R8_SNORM: result = 3; break;
+        case VK_FORMAT_B8G8R8_USCALED: result = 3; break;
+        case VK_FORMAT_B8G8R8_SSCALED: result = 3; break;
+        case VK_FORMAT_B8G8R8_UINT: result = 3; break;
+        case VK_FORMAT_B8G8R8_SINT: result = 3; break;
+        case VK_FORMAT_B8G8R8_SRGB: result = 3; break;
+        case VK_FORMAT_R8G8B8A8_UNORM: result = 4; break;
+        case VK_FORMAT_R8G8B8A8_SNORM: result = 4; break;
+        case VK_FORMAT_R8G8B8A8_USCALED: result = 4; break;
+        case VK_FORMAT_R8G8B8A8_SSCALED: result = 4; break;
+        case VK_FORMAT_R8G8B8A8_UINT: result = 4; break;
+        case VK_FORMAT_R8G8B8A8_SINT: result = 4; break;
+        case VK_FORMAT_R8G8B8A8_SRGB: result = 4; break;
+        case VK_FORMAT_B8G8R8A8_UNORM: result = 4; break;
+        case VK_FORMAT_B8G8R8A8_SNORM: result = 4; break;
+        case VK_FORMAT_B8G8R8A8_USCALED: result = 4; break;
+        case VK_FORMAT_B8G8R8A8_SSCALED: result = 4; break;
+        case VK_FORMAT_B8G8R8A8_UINT: result = 4; break;
+        case VK_FORMAT_B8G8R8A8_SINT: result = 4; break;
+        case VK_FORMAT_B8G8R8A8_SRGB: result = 4; break;
+        case VK_FORMAT_A8B8G8R8_UNORM_PACK32: result = 4; break;
+        case VK_FORMAT_A8B8G8R8_SNORM_PACK32: result = 4; break;
+        case VK_FORMAT_A8B8G8R8_USCALED_PACK32: result = 4; break;
+        case VK_FORMAT_A8B8G8R8_SSCALED_PACK32: result = 4; break;
+        case VK_FORMAT_A8B8G8R8_UINT_PACK32: result = 4; break;
+        case VK_FORMAT_A8B8G8R8_SINT_PACK32: result = 4; break;
+        case VK_FORMAT_A8B8G8R8_SRGB_PACK32: result = 4; break;
+        case VK_FORMAT_A2R10G10B10_UNORM_PACK32: result = 4; break;
+        case VK_FORMAT_A2R10G10B10_SNORM_PACK32: result = 4; break;
+        case VK_FORMAT_A2R10G10B10_USCALED_PACK32: result = 4; break;
+        case VK_FORMAT_A2R10G10B10_SSCALED_PACK32: result = 4; break;
+        case VK_FORMAT_A2R10G10B10_UINT_PACK32: result = 4; break;
+        case VK_FORMAT_A2R10G10B10_SINT_PACK32: result = 4; break;
+        case VK_FORMAT_A2B10G10R10_UNORM_PACK32: result = 4; break;
+        case VK_FORMAT_A2B10G10R10_SNORM_PACK32: result = 4; break;
+        case VK_FORMAT_A2B10G10R10_USCALED_PACK32: result = 4; break;
+        case VK_FORMAT_A2B10G10R10_SSCALED_PACK32: result = 4; break;
+        case VK_FORMAT_A2B10G10R10_UINT_PACK32: result = 4; break;
+        case VK_FORMAT_A2B10G10R10_SINT_PACK32: result = 4; break;
+        case VK_FORMAT_R16_UNORM: result = 2; break;
+        case VK_FORMAT_R16_SNORM: result = 2; break;
+        case VK_FORMAT_R16_USCALED: result = 2; break;
+        case VK_FORMAT_R16_SSCALED: result = 2; break;
+        case VK_FORMAT_R16_UINT: result = 2; break;
+        case VK_FORMAT_R16_SINT: result = 2; break;
+        case VK_FORMAT_R16_SFLOAT: result = 2; break;
+        case VK_FORMAT_R16G16_UNORM: result = 4; break;
+        case VK_FORMAT_R16G16_SNORM: result = 4; break;
+        case VK_FORMAT_R16G16_USCALED: result = 4; break;
+        case VK_FORMAT_R16G16_SSCALED: result = 4; break;
+        case VK_FORMAT_R16G16_UINT: result = 4; break;
+        case VK_FORMAT_R16G16_SINT: result = 4; break;
+        case VK_FORMAT_R16G16_SFLOAT: result = 4; break;
+        case VK_FORMAT_R16G16B16_UNORM: result = 6; break;
+        case VK_FORMAT_R16G16B16_SNORM: result = 6; break;
+        case VK_FORMAT_R16G16B16_USCALED: result = 6; break;
+        case VK_FORMAT_R16G16B16_SSCALED: result = 6; break;
+        case VK_FORMAT_R16G16B16_UINT: result = 6; break;
+        case VK_FORMAT_R16G16B16_SINT: result = 6; break;
+        case VK_FORMAT_R16G16B16_SFLOAT: result = 6; break;
+        case VK_FORMAT_R16G16B16A16_UNORM: result = 8; break;
+        case VK_FORMAT_R16G16B16A16_SNORM: result = 8; break;
+        case VK_FORMAT_R16G16B16A16_USCALED: result = 8; break;
+        case VK_FORMAT_R16G16B16A16_SSCALED: result = 8; break;
+        case VK_FORMAT_R16G16B16A16_UINT: result = 8; break;
+        case VK_FORMAT_R16G16B16A16_SINT: result = 8; break;
+        case VK_FORMAT_R16G16B16A16_SFLOAT: result = 8; break;
+        case VK_FORMAT_R32_UINT: result = 4; break;
+        case VK_FORMAT_R32_SINT: result = 4; break;
+        case VK_FORMAT_R32_SFLOAT: result = 4; break;
+        case VK_FORMAT_R32G32_UINT: result = 8; break;
+        case VK_FORMAT_R32G32_SINT: result = 8; break;
+        case VK_FORMAT_R32G32_SFLOAT: result = 8; break;
+        case VK_FORMAT_R32G32B32_UINT: result = 12; break;
+        case VK_FORMAT_R32G32B32_SINT: result = 12; break;
+        case VK_FORMAT_R32G32B32_SFLOAT: result = 12; break;
+        case VK_FORMAT_R32G32B32A32_UINT: result = 16; break;
+        case VK_FORMAT_R32G32B32A32_SINT: result = 16; break;
+        case VK_FORMAT_R32G32B32A32_SFLOAT: result = 16; break;
+        case VK_FORMAT_R64_UINT: result = 8; break;
+        case VK_FORMAT_R64_SINT: result = 8; break;
+        case VK_FORMAT_R64_SFLOAT: result = 8; break;
+        case VK_FORMAT_R64G64_UINT: result = 16; break;
+        case VK_FORMAT_R64G64_SINT: result = 16; break;
+        case VK_FORMAT_R64G64_SFLOAT: result = 16; break;
+        case VK_FORMAT_R64G64B64_UINT: result = 24; break;
+        case VK_FORMAT_R64G64B64_SINT: result = 24; break;
+        case VK_FORMAT_R64G64B64_SFLOAT: result = 24; break;
+        case VK_FORMAT_R64G64B64A64_UINT: result = 32; break;
+        case VK_FORMAT_R64G64B64A64_SINT: result = 32; break;
+        case VK_FORMAT_R64G64B64A64_SFLOAT: result = 32; break;
+        case VK_FORMAT_B10G11R11_UFLOAT_PACK32: result = 4; break;
+        case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32: result = 4; break;
+
+        default:
+            break;
+    }
+    return result;
+}
+
+VkPipelineVertexInputStateCreateInfo PLCore_CreateInputInfoFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule shader) {
+    SpvReflectShaderModule mod;
+    spvReflectCreateShaderModule(shader.size, shader.buffer, &mod);
+
+    uint32_t inCount = 0;
+    uint32_t outputCount = 0;
+    spvReflectEnumerateInputVariables(&mod, &inCount, VK_NULL_HANDLE);
+    spvReflectEnumerateOutputVariables(&mod, &outputCount, VK_NULL_HANDLE);
+    SpvReflectInterfaceVariable** inVariables = malloc(sizeof(SpvReflectInterfaceVariable*) * inCount);
+    SpvReflectInterfaceVariable** outVariables = malloc(sizeof(SpvReflectInterfaceVariable*) * inCount);
+    spvReflectEnumerateInputVariables(&mod, &inCount, inVariables);
+    spvReflectEnumerateOutputVariables(&mod, &outputCount, outVariables);
+
+    uint32_t bindingCount = 1;
+    VkVertexInputBindingDescription* binding = malloc(sizeof(VkVertexInputBindingDescription) * bindingCount);
+    binding[0].binding = 0;
+    binding[0].stride = 0;
+    binding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputAttributeDescription* attribs = malloc(sizeof(VkVertexInputAttributeDescription) * inCount);
+    for (int i = 0; i < inCount; i++) {
+        printf("Shader Input: [\"%s\"]: Location %i | Format %i\n", inVariables[i]->name, inVariables[i]->location, inVariables[i]->format);
+        attribs[i].format = (VkFormat)inVariables[i]->format;
+        attribs[i].binding = binding[0].binding;
+        attribs[i].location = inVariables[i]->location;
+        attribs[i].offset = 0;
+    }
+    qsort(attribs, inCount, sizeof(VkVertexInputAttributeDescription), compareAttributeDesc);
+    for (int i = 0; i < inCount; i++) {
+        uint32_t format_size = FormatSize(attribs[i].format);
+        attribs[i].offset = binding[0].stride;
+        binding[0].stride += format_size;
+    }
+
+    VkPipelineVertexInputStateCreateInfo vertexInfo;
+    vertexInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInfo.pNext = VK_NULL_HANDLE;
+    vertexInfo.flags = 0;
+    vertexInfo.pVertexAttributeDescriptions = attribs;
+    vertexInfo.vertexAttributeDescriptionCount = inCount;
+    vertexInfo.pVertexBindingDescriptions = binding;
+    vertexInfo.vertexBindingDescriptionCount = bindingCount;
+
+    return vertexInfo;
+}
+
 
 
 

@@ -20,10 +20,11 @@
 #include <cglm/cglm.h>          // required: matrix and vectorFunctionality
 #include <cglm/struct.h>        // required: extensions of base 'cglm/cglm.h' functionality
 
+#include "SpirvReflection.h"
 
-#ifdef PLCORE_REFLECTION
-    #include "SpirvReflection.h"
-#endif
+// no use, i just thought it was funny
+#define verylong long long int
+
 
 enum PLCore_MemoryProperties {
     GPU_LOCAL = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -38,13 +39,15 @@ enum PLCore_MemoryProperties {
 typedef struct {
     VkInstance instance;
     VkDebugUtilsMessengerEXT priv_Messenger;
-} PLCore_Instance;
+} PLCore_Priv_Instance;
+
 typedef struct {
     VkQueue queue;
     uint32_t queueIndex;
     uint32_t familyIndex;
     VkQueueFlagBits flag;
 } PLCore_DeviceQueue;
+
 typedef struct {
     VkPhysicalDevice physicalDevice;
     VkPhysicalDeviceProperties properties;
@@ -56,16 +59,40 @@ typedef struct {
 
     VkDevice device;
 } PLCore_Device;
+
 typedef struct {
     VkCommandPool pool;                 // Buffer Allocator
     VkCommandBuffer* buffers;           // Buffer Object Array
 } PLCore_CommandPool;
 typedef struct {
-    PLCore_Instance pl_instance;
+    PLCore_Priv_Instance pl_instance;
     PLCore_Device pl_device;
 
     PLCore_CommandPool pl_transferPool;
 } PLCore_RenderInstance;
+
+
+
+
+typedef struct {
+    // Creation Information
+    VkDescriptorPoolSize* sizes;
+    uint32_t poolSizeCount;
+    VkDescriptorSetLayoutBinding* bindings;
+    uint32_t bindingCount;
+    VkDescriptorType* types;
+    uint32_t typeCount;
+    uint32_t maxDescriptorSets;
+    // Data Structures
+    VkDescriptorPool pool;
+} PLCore_DescriptorPoolAllocator;
+
+typedef struct {
+    VkDescriptorSetLayout layout;
+    VkDescriptorSet set;
+    VkWriteDescriptorSet* writes;
+    uint32_t slot;
+} PLCore_DescriptorSet;
 typedef struct {
     VkSwapchainKHR swapchain;           // Framebuffer Organiser
     VkPresentModeKHR presentMode;       // How The Framebuffers Are Presented
@@ -115,11 +142,31 @@ typedef struct {
     VkShaderModule module;
     VkResult result;
     VkShaderStageFlagBits stage;
-    #ifdef PLCORE_REFLECTION
-        SpvReflectResult reflectionModuleResult;
-        SpvReflectShaderModule reflectionModule;
-    #endif
+
+    uint32_t descriptorSetCount;
+    PLCore_DescriptorSet* descriptorSets;
+
+
 } PLCore_ShaderModule;
+
+//      DESCRIPTOR FUNCTIONS
+
+PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t descriptorSlot, VkDescriptorType* types, uint32_t* descriptorSetCount, uint32_t count, uint32_t maxDescriptorSets, VkShaderStageFlagBits shaderStage);
+PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolFromAllocator(VkDevice device, PLCore_DescriptorPoolAllocator allocator);
+PLCore_DescriptorSet PLCore_CreateDescriptorSets(VkDevice device, VkDescriptorType typeFlags, PLCore_DescriptorPoolAllocator allocator);
+void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
+
+VkDescriptorSetLayoutBinding PLCore_CreateDescriptorSetLayoutBinding(uint32_t slot, uint32_t count, VkDescriptorType type, VkShaderStageFlags stage);
+VkDescriptorSet PLCore_CreateDescriptorSetAdvanced(PLCore_RenderInstance instance, VkDescriptorPool pool, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings, VkShaderStageFlags stage, VkDescriptorSetLayout* layout);
+
+VkDescriptorPool PLCore_CreateGeneralizedDescriptorPool(PLCore_RenderInstance instance);
+
+VkDescriptorSet PLCore_CreateDescriptorSet(PLCore_RenderInstance instance, VkDescriptorPool pool, uint32_t slot, VkDescriptorType type, VkShaderStageFlags stage, VkDescriptorSetLayout* layout);
+
+PLCore_DescriptorSet* PLCore_CreateDescriptorSetFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule shader, VkDescriptorPool allcationPool, uint32_t* out_DescriptorCount);
+
+VkPipelineVertexInputStateCreateInfo PLCore_CreateInputInfoFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule shader);
+
 typedef struct {
     int32_t hasShaders;
     uint32_t shaderStageCount;
@@ -160,6 +207,10 @@ typedef struct {
     VkDeviceMemory memory;
     VkDescriptorBufferInfo bufferInfo;
 } PLCore_Buffer;
+typedef struct {
+    VkSampler sampler;
+    VkDescriptorImageInfo samplerInfo;
+} PLCore_ImageSampler;
 typedef struct {
     PLCore_Image image;
     VkDescriptorImageInfo imageInfo;
@@ -207,7 +258,7 @@ VkImage                 PLCore_Priv_CreateDepthBuffer(VkDevice device, VkPhysica
 VkFramebuffer           PLCore_Priv_CreateFramebuffer(VkDevice device, VkExtent2D resolution, VkRenderPass renderPass, VkImageView swapchainImage, VkImageView depthView);
 
 PLCore_RenderInstance   PLCore_CreateRenderingInstance();
-PLCore_Window           PLCore_CreateWindow(VkInstance instance, uint32_t width, uint32_t height);
+PLCore_Window           PLCore_CreateWindow(PLCore_RenderInstance instance, uint32_t width, uint32_t height);
 PLCore_Renderer         PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Window window);
 PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader, VkPipelineLayout* layout);
 
@@ -215,6 +266,8 @@ PLCore_GraphicsPipeline PLCore_CreatePipelineFromBuilder(PLCore_RenderInstance i
 
 PLCore_Buffer           PLCore_CreateBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage, VkMemoryPropertyFlagBits memoryFlags);
 PLCore_Buffer           PLCore_CreateGPUBuffer(PLCore_RenderInstance instance, VkDeviceSize size, VkBufferUsageFlagBits usage, void* data);
+PLCore_Buffer           PLCore_CreateUniformBuffer(PLCore_RenderInstance instance, VkDeviceSize size);
+void                    PLCore_DestroyBuffer(PLCore_RenderInstance instance, PLCore_Buffer* buffer);
 VkCommandBuffer         PLCore_ActiveRenderBuffer(PLCore_Renderer renderer);
 
 void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window);
@@ -235,7 +288,7 @@ void PLCore_Priv_AddColorBlendStateToPipelineBuilder(PLCore_PipelineBuilder* bui
 void PLCore_Priv_AddRenderPassToPipelineBuilder(PLCore_PipelineBuilder* builder, VkRenderPass renderPass);
 void PLCore_Priv_AddDepthStencilToPipelineBuilder(PLCore_PipelineBuilder* builder, VkPipelineDepthStencilStateCreateInfo depthStencil);
 
-PLCore_ShaderModule                             PLCore_Priv_CreateShader(VkDevice device, const char* path, VkShaderStageFlagBits stage, const char* entryPoint);
+PLCore_ShaderModule                             PLCore_CreateShader(PLCore_RenderInstance instance, const char* path, VkShaderStageFlagBits stage, const char* entryPoint, VkDescriptorPool allocationPool);
 VkPipelineShaderStageCreateInfo                 PLCore_Priv_CreateShaderStage(PLCore_ShaderModule shader, VkShaderStageFlagBits shaderStage);
 VkVertexInputAttributeDescription               PLCore_Priv_CreateVertexAttribute(uint32_t binding, uint32_t location, VkFormat format, uint32_t offset);
 VkVertexInputBindingDescription                 PLCore_Priv_CreateVertexBinding(uint32_t binding, VkVertexInputRate inputRate, VkDeviceSize stride);
@@ -265,29 +318,12 @@ typedef struct {
 } PLCore_Vertex;
 
 
-typedef struct {
-    PLCore_Buffer buffer;
-    PLCore_Vertex* data;
-    size_t dataCount;
-    size_t dataSize;
-    int dataChanged;
-} PLCore_DynamicVertexBuffer;
-
-PLCore_DynamicVertexBuffer  PLCore_CreateDynamicVertexBuffer();
-// TODO: Vertex Becomes Invalid After Vertex Buffer Is Cleared So Maybe Cope With That
-PLCore_Vertex*              PLCore_PushVerticesToDynamicVertexBuffer(PLCore_DynamicVertexBuffer* buffer, size_t elementSize, size_t elementCount, PLCore_Vertex* data);
-PLCore_Buffer               PLCore_RequestDynamicVertexBufferToGPU(PLCore_RenderInstance instance, PLCore_DynamicVertexBuffer* buffer, VkBufferUsageFlagBits usage, size_t elementSize);
-void                        PLCore_ClearDynamicVertexBufferData(PLCore_DynamicVertexBuffer* buffer);
-void                        PLCore_MoveDynamicBufferVertices(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset);
-void                        PLCore_MoveDynamicBufferVerticesTo(PLCore_DynamicVertexBuffer* buffer, PLCore_Vertex* vertices, size_t vertexCount, float xOffset, float yOffset);
-
-
 PLCore_Image PLCore_CreateImage(VkDevice device, VkImageType type, VkFormat format, VkExtent3D extent, VkImageUsageFlagBits usage, uint32_t queueFamilyIndex, VkPhysicalDeviceMemoryProperties memoryProperties);
 void PLCore_DestroyImage(VkDevice device, PLCore_Image image);
 void PLCore_TransitionTextureLayout(PLCore_Buffer buffer, PLCore_Image image, uint32_t queueFamily, VkExtent3D extent, VkCommandBuffer commandBuffer, VkFence* waitFence, VkQueue submitQueue);
 PLCore_Texture PLCore_CreateTexture(PLCore_RenderInstance instance, PLCore_Renderer renderer, const char* path);
 
-VkSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode);
+PLCore_ImageSampler PLCore_CreateSampler(VkDevice device, VkFilter filter, VkSamplerAddressMode addressMode);
 
 typedef struct {
     mat4s model, view, proj;
