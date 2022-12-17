@@ -14,6 +14,8 @@ typedef struct {
     PLCore_Renderer renderer;
     PLCore_GraphicsPipeline pipeline;
     struct vertexObjects {
+        bool needsUpdate;
+
         uint32_t msTillUpdate;
         clock_t updateTimer;
 
@@ -21,6 +23,8 @@ typedef struct {
         uint32_t vertexCount;
         PLCore_Vertex* vertices;
         PLCore_Buffer vertexBuffer;
+
+        VkSemaphore updateSemaphore;
 
     } priv_vertObj;
     struct descriptorObjects {
@@ -40,6 +44,7 @@ void            ENGINE_PREFIX(WS_, BindDescriptors)(WS_Engine* engine);
 void            ENGINE_PREFIX(WS_, CreateVertexBuffer)(WS_Engine* engine);
 PLCore_Vertex*  ENGINE_PREFIX(WS_, NewQuad)(WS_Engine* engine, float x, float y, float z, float w, float h, uint32_t id);
 
+void            ENGINE_PREFIX(WS_, Draw)(WS_Engine* engine);
 
 
 #endif //PLUTONIUM_ENGINE_HPP

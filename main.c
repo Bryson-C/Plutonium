@@ -408,27 +408,33 @@ int main(int argc, char** argv) {
                                                               sizeof(PLCore_Vertex) * 4,
                                                               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                                                               engine.priv_vertObj.vertices);
-
-    uint32_t indices[] = {
-            0, 1, 2, 2, 3, 0
-    };
-    PLCore_Buffer indexBuffer = PLCore_CreateGPUBuffer(engine.instance, sizeof(uint32_t) * 6, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices);
+    uint32_t indexCount = 6;
+    uint32_t indices[] =
+            {
+                0, 1, 2, 2, 3, 0,
+            };
+    PLCore_Buffer indexBuffer = PLCore_CreateGPUBuffer(engine.instance, sizeof(uint32_t) * indexCount, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices);
 
     PLCore_CameraMoveScheme keyBinds = PLCore_GetDefaultMoveScheme();
     PLCore_CameraUniform camera = PLCore_CreateCameraUniform();
+
+    clock_t time = clock();
+
     while (WS_StartRenderLoop(&engine)) {
         PLCore_PollCameraMovements(engine.window, &camera, keyBinds);
         PLCore_UploadDataToBuffer(engine.instance.pl_device.device, &uniformBuffers[engine.renderer.priv_activeFrame].memory, sizeof(PLCore_CameraUniform), &camera);
-/*
-        if (glfwGetMouseButton(engine.window.window, GLFW_MOUSE_BUTTON_LEFT) && clock() - keyBinds.moveTime > 1000) {
-            WS_NewQuad(&engine, 1.0f, 1.0f, 1.0f, .5f, .5f, 1);
+
+        if (glfwGetMouseButton(engine.window.window, GLFW_MOUSE_BUTTON_LEFT) && clock() - time > 200) {
+            WS_NewQuad(&engine, 1.0f, 1.0f, 1.0f, 0.5f, 0.5f, 2);
         }
-*/
+
+
+
         VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(engine.renderer);
         WS_BindDescriptors(&engine);
 
         vkCmdBindIndexBuffer(activeBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(activeBuffer, 6, 1, 0, 0, 0);
+        vkCmdDrawIndexed(activeBuffer, indexCount, 1, 0, 0, 0);
 
         WS_StopRenderLoop(&engine);
     }

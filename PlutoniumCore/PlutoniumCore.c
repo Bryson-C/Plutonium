@@ -957,8 +957,6 @@ void PLCore_UploadDataToBuffer(VkDevice device, VkDeviceMemory* memory, VkDevice
     memcpy(bufferData, data, (VkDeviceSize)size);
     vkUnmapMemory(device, *memory);
 }
-
-
 static void BeginFrameRecording(VkCommandBuffer buffer, VkRenderPass renderPass, VkFramebuffer framebuffer, VkRect2D scissor, uint32_t clearCount, VkClearValue* clears) {
     VkRenderPassBeginInfo beginfo;
     beginfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1052,7 +1050,7 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
 
     VkBool32 presentableQueue;
     vkGetPhysicalDeviceSurfaceSupportKHR(instance.pl_device.physicalDevice, instance.pl_device.graphicsQueue.familyIndex, window.surface, &presentableQueue);
-    printf("Presentable: %s\n", (presentableQueue) ? "True" : "False");
+    //printf("Presentable: %s\n", (presentableQueue) ? "True" : "False");
 
     VkSurfaceFormatKHR renderFormat;
     VkPresentModeKHR renderMode;
@@ -1244,17 +1242,15 @@ void PLCore_DestroyBuffer(PLCore_RenderInstance instance, PLCore_Buffer* buffer)
     vkFreeMemory(instance.pl_device.device, (*buffer).memory, VK_NULL_HANDLE);
 }
 
-void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
-    VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer->swapchain, UINT64_MAX, renderer->priv_waitSemaphores[renderer->priv_activeFrame], VK_NULL_HANDLE, &(*renderer).priv_imageIndex);
-    if (imageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
-        printf("Out Of Date Render Objects!\n");
-        PLCore_RecreateRenderObjects(instance, renderer, pipeline, window);
-    }
-
-    vkWaitForFences(instance.pl_device.device, 1, &renderer->priv_renderFences[renderer->priv_activeFrame], VK_TRUE, UINT64_MAX);
-    vkResetFences(instance.pl_device.device, 1, &renderer->priv_renderFences[renderer->priv_activeFrame]);
-
-
+void PLCore_BeginCommandBuffer(VkCommandBuffer buffer) {
+    VkCommandBufferBeginInfo beginInfo;
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.pNext = VK_NULL_HANDLE;
+    beginInfo.flags = 0;
+    beginInfo.pInheritanceInfo = VK_NULL_HANDLE;
+    vkBeginCommandBuffer(buffer, &beginInfo);
+}
+void PLCore_BeginRenderPass(VkCommandBuffer buffer, VkRenderPass renderPass, VkFramebuffer framebuffer, PLCore_Window* window, PLCore_Renderer* renderer) {
     VkRect2D scissor = window->renderArea;
     VkClearValue clears[2];
     clears[0].color.float32[0] = 0.015f;
@@ -1264,24 +1260,91 @@ void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer
     clears[1].depthStencil.depth = 1.0f;
     clears[1].depthStencil.stencil = 0;
 
-    BeginFrameRecording(renderer->graphicsPool.buffers[renderer->priv_imageIndex], renderer->renderPass, renderer->framebuffers[renderer->priv_imageIndex], scissor, 2, clears);
+    VkRenderPassBeginInfo beginfo;
+    beginfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    beginfo.pNext = VK_NULL_HANDLE;
+    beginfo.renderPass = renderPass;
+    beginfo.framebuffer = framebuffer;
+    beginfo.renderArea = scissor;
+    beginfo.clearValueCount = 2;
+    beginfo.pClearValues = clears;
+
+    vkCmdBeginRenderPass(buffer, &beginfo, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdSetViewport(renderer->graphicsPool.buffers[renderer->priv_imageIndex], 0, 1, &window->viewport);
     vkCmdSetScissor(renderer->graphicsPool.buffers[renderer->priv_imageIndex], 0, 1, &window->renderArea);
 }
-void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window) {
+uint32_t PLCore_GetImageIndex(PLCore_RenderInstance instance, PLCore_Renderer* renderer) {
+    VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer->swapchain, UINT64_MAX, renderer->priv_waitSemaphores[renderer->priv_activeFrame], VK_NULL_HANDLE, &(*renderer).priv_imageIndex);
+    return (*renderer).priv_imageIndex;
+}
+VkFramebuffer PLCore_GetActiveFrameBuffer(PLCore_Renderer* renderer) {
+    return renderer->framebuffers[renderer->priv_imageIndex];
+}
+void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window, PLCore_BeginFrameAdditionalInfo* additionalInfo) {
+    VkRect2D scissor = window->renderArea;
+    VkClearValue clears[2];
+    clears[0].color.float32[0] = 0.015f;
+    clears[0].color.float32[1] = 0.015f;
+    clears[0].color.float32[2] = 0.015f;
+    clears[0].color.float32[3] = 1.0f;
+    clears[1].depthStencil.depth = 1.0f;
+    clears[1].depthStencil.stencil = 0;
+
+    if (additionalInfo == VK_NULL_HANDLE || additionalInfo->beginStage != RENDERPASS_START) {
+        VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer->swapchain, UINT64_MAX, (*renderer).priv_waitSemaphores[renderer->priv_activeFrame], VK_NULL_HANDLE, &(*renderer).priv_imageIndex);
+        if (imageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
+            printf("Out Of Date Render Objects!\n");
+            PLCore_RecreateRenderObjects(instance, renderer, pipeline, window);
+        }
+
+        vkWaitForFences(instance.pl_device.device, 1, &renderer->priv_renderFences[renderer->priv_activeFrame], VK_TRUE, UINT64_MAX);
+        vkResetFences(instance.pl_device.device, 1, &renderer->priv_renderFences[renderer->priv_activeFrame]);
+
+        PLCore_BeginCommandBuffer(renderer->graphicsPool.buffers[renderer->priv_imageIndex]);
+    }
+    PLCore_BeginRenderPass(renderer->graphicsPool.buffers[renderer->priv_imageIndex], renderer->renderPass, renderer->framebuffers[renderer->priv_imageIndex], window, renderer);
+    vkCmdSetViewport(renderer->graphicsPool.buffers[renderer->priv_imageIndex], 0, 1, &window->viewport);
+    vkCmdSetScissor(renderer->graphicsPool.buffers[renderer->priv_imageIndex], 0, 1, &window->renderArea);
+}
+void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window, PLCore_EndFrameAdditionalInfo* additionalInfo) {
     EndFrameRecording(renderer->graphicsPool.buffers[renderer->priv_imageIndex]);
-    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
     VkSubmitInfo submitInfo;
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.pNext = VK_NULL_HANDLE;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &renderer->priv_waitSemaphores[renderer->priv_activeFrame];
-    submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &renderer->graphicsPool.buffers[renderer->priv_imageIndex];
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &renderer->priv_signalSemaphores[renderer->priv_activeFrame];
+
+    uint32_t waitCount = 1 + ((additionalInfo == VK_NULL_HANDLE) ? 0 : additionalInfo->additionalSemaphoreCountWait);
+    uint32_t signalCount = 1 + ((additionalInfo == VK_NULL_HANDLE) ? 0 : additionalInfo->additionalSemaphoreCountSignal);
+
+    VkSemaphore* waits = malloc(sizeof(VkSemaphore) * waitCount);
+    waits[0] = (*renderer).priv_waitSemaphores[renderer->priv_activeFrame];
+    if (additionalInfo != VK_NULL_HANDLE)
+        // My Dumbass Couldn't Be Worse With Memory, This Took An Hour To Figure Out :(
+        // Turns Out The Object Wasn't Even Created Yet
+        memcpy(waits+1, additionalInfo->additionalSemaphoresWait, sizeof(VkSemaphore) * additionalInfo->additionalSemaphoreCountWait);
+
+    submitInfo.pWaitSemaphores = waits;
+    submitInfo.waitSemaphoreCount = waitCount;
+
+
+    VkSemaphore* signals = malloc(sizeof(VkSemaphore) * signalCount);
+    signals[0] = (*renderer).priv_signalSemaphores[renderer->priv_activeFrame];
+
+    if (additionalInfo != VK_NULL_HANDLE)
+        memcpy(signals+1, additionalInfo->additionalSemaphoresSignal, sizeof(VkSemaphore) * additionalInfo->additionalSemaphoreCountSignal);
+
+
+    submitInfo.pSignalSemaphores = signals;
+    submitInfo.signalSemaphoreCount = signalCount;
+
+    VkPipelineStageFlags* waitStages = malloc(sizeof(VkPipelineStageFlags) * waitCount);
+    for (int i = 0; i < waitCount; i++)
+        waitStages[i] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+
+    submitInfo.pWaitDstStageMask = waitStages;
 
     vkQueueSubmit(instance.pl_device.graphicsQueue.queue, 1, &submitInfo, (*renderer).priv_renderFences[renderer->priv_activeFrame]);
 
@@ -1289,8 +1352,8 @@ void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, 
     VkPresentInfoKHR presentInfo;
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.pNext = VK_NULL_HANDLE;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &renderer->priv_signalSemaphores[renderer->priv_activeFrame];
+    presentInfo.waitSemaphoreCount = signalCount;
+    presentInfo.pWaitSemaphores = signals;
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &renderer->swapchain;
     presentInfo.pImageIndices = &renderer->priv_imageIndex;
@@ -2212,10 +2275,7 @@ PLCore_DescriptorSet* PLCore_CreateDescriptorSetFromShader(PLCore_RenderInstance
             bindings[j].descriptorType = (VkDescriptorType)descriptorInfos[i]->bindings[j]->descriptor_type;
             bindings[j].pImmutableSamplers = VK_NULL_HANDLE;
             bindings[j].stageFlags = shader.stage;
-            printf("Shader Descriptor: [\"%s\"]: Set: %i  |  Count: %i\n",
-                   descriptorInfos[i]->bindings[j]->name,
-                   descriptorInfos[i]->bindings[j]->set,
-                   descriptorInfos[i]->bindings[j]->count);
+            //printf("Shader Descriptor: [\"%s\"]:\n\t Set: %i  |  Count: %i\n", descriptorInfos[i]->bindings[j]->name, descriptorInfos[i]->bindings[j]->set, descriptorInfos[i]->bindings[j]->count);
         }
         sets[i].set = PLCore_CreateDescriptorSetAdvanced(instance, allcationPool, descriptorInfos[i]->binding_count, bindings, shader.stage, &sets[i].layout);
         for (int j = 0; j < descriptorInfos[i]->binding_count; j++) {
@@ -2395,7 +2455,7 @@ VkPipelineVertexInputStateCreateInfo PLCore_CreateInputInfoFromShader(PLCore_Ren
 
     VkVertexInputAttributeDescription* attribs = malloc(sizeof(VkVertexInputAttributeDescription) * inCount);
     for (int i = 0; i < inCount; i++) {
-        printf("Shader Input: [\"%s\"]: Location %i | Format %i\n", inVariables[i]->name, inVariables[i]->location, inVariables[i]->format);
+        //printf("Shader Input: [\"%s\"]:\n\t Location %i | Format %i\n", inVariables[i]->name, inVariables[i]->location, inVariables[i]->format);
         attribs[i].format = (VkFormat)inVariables[i]->format;
         attribs[i].binding = binding[0].binding;
         attribs[i].location = inVariables[i]->location;

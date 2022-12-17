@@ -270,8 +270,22 @@ PLCore_Buffer           PLCore_CreateUniformBuffer(PLCore_RenderInstance instanc
 void                    PLCore_DestroyBuffer(PLCore_RenderInstance instance, PLCore_Buffer* buffer);
 VkCommandBuffer         PLCore_ActiveRenderBuffer(PLCore_Renderer renderer);
 
-void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window);
-void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window);
+typedef struct {
+    enum beginFrameStartStage {
+        BEGIN_FRAME_FROM_BEGINNING,
+        CMD_BUFFER_START,
+        RENDERPASS_START,
+    } beginStage;
+} PLCore_BeginFrameAdditionalInfo;
+void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window, PLCore_BeginFrameAdditionalInfo* additionalInfo);
+
+typedef struct {
+    uint32_t additionalSemaphoreCountSignal;
+    VkSemaphore* additionalSemaphoresSignal;
+    uint32_t additionalSemaphoreCountWait;
+    VkSemaphore* additionalSemaphoresWait;
+} PLCore_EndFrameAdditionalInfo;
+void PLCore_EndFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer, PLCore_GraphicsPipeline* pipeline, PLCore_Window* window, PLCore_EndFrameAdditionalInfo* additionalInfo);
 
 void PLCore_RecordCommandBuffer(VkCommandBuffer buffer);
 void PLCore_StopCommandBuffer(VkCommandBuffer buffer);
@@ -345,5 +359,10 @@ PLCore_CameraUniform PLCore_CreateCameraUniform();
 void PLCore_PollCameraMovements(PLCore_Window window, PLCore_CameraUniform* camera, PLCore_CameraMoveScheme scheme);
 
 
+
+void PLCore_BeginCommandBuffer(VkCommandBuffer buffer);
+void PLCore_BeginRenderPass(VkCommandBuffer buffer, VkRenderPass renderPass, VkFramebuffer framebuffer, PLCore_Window* window, PLCore_Renderer* renderer);
+uint32_t PLCore_GetImageIndex(PLCore_RenderInstance instance, PLCore_Renderer* renderer);
+VkFramebuffer PLCore_GetActiveFrameBuffer(PLCore_Renderer* renderer);
 
 #endif //PLUTONIUM_PLUTONIUMCORE_H

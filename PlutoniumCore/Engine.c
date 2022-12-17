@@ -9,6 +9,7 @@ WS_Engine ENGINE_PREFIX(WS_, Initialize)(uint32_t width, uint32_t height) {
     Engine.instance = PLCore_CreateRenderingInstance();
     Engine.window = PLCore_CreateWindow(Engine.instance, width, height);
     Engine.renderer = PLCore_CreateRenderer(Engine.instance, Engine.window);
+
     WS_CreateVertexBuffer(&Engine);
     return Engine;
 }
@@ -43,35 +44,49 @@ WS_Engine ENGINE_PREFIX(WS_, InitializeRenderer)(WS_Engine engine, PLCore_Shader
 bool ENGINE_PREFIX(WS_, StartRenderLoop)(WS_Engine* engine) {
     // update vertex buffer if needed
     // TODO: This Crashes Code
-    /*
-    if (clock() - engine->priv_vertObj.updateTimer >= engine->priv_vertObj.msTillUpdate && (*engine).priv_vertObj.vertices != VK_NULL_HANDLE) {
-        (*engine).priv_vertObj.updateTimer = clock();
-        VkCommandBuffer updateBuffer = PLCore_Priv_CreateCommandBuffers(engine->instance.pl_device.device,
-                                                                        engine->renderer.graphicsPool.pool, 1)[0];
-        PLCore_RecordCommandBuffer(updateBuffer);
 
-        vkCmdUpdateBuffer(updateBuffer,
-                          engine->priv_vertObj.vertexBuffer.buffer,
+
+    if (engine->priv_vertObj.needsUpdate && clock() - engine->priv_vertObj.updateTimer >= engine->priv_vertObj.msTillUpdate
+        && (*engine).priv_vertObj.vertices != VK_NULL_HANDLE && engine->priv_vertObj.vertexCount > 0) {
+
+        (*engine).priv_vertObj.updateTimer = clock();
+        // Get Index 0 Because It Creates An Array With 1 Element
+        VkCommandBuffer buffer = PLCore_Priv_CreateCommandBuffers(engine->instance.pl_device.device, engine->renderer.graphicsPool.pool, 1)[0];
+        PLCore_RecordCommandBuffer(buffer);
+
+        printf("Updating Vertex Buffer\n");
+        vkCmdUpdateBuffer(buffer, engine->priv_vertObj.vertexBuffer.buffer,
                           sizeof(PLCore_Vertex) * engine->priv_vertObj.vertexCount,
                           sizeof(PLCore_Vertex) * engine->priv_vertObj.vertexCount,
                           engine->priv_vertObj.vertices);
+        printf("Updated Vertex Buffer\n");
 
-        PLCore_StopCommandBuffer(updateBuffer);
-        PLCore_SubmitCommandBuffer(updateBuffer, engine->instance.pl_device.graphicsQueue.queue, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE);
-    }*/
+        PLCore_StopCommandBuffer(buffer);
+        PLCore_SubmitCommandBuffer(buffer,
+                                   engine->instance.pl_device.graphicsQueue.queue,
+                                   VK_NULL_HANDLE,
+                                   &engine->priv_vertObj.updateSemaphore,
+                                   VK_NULL_HANDLE);
+        printf("Updated!\n");
+        (*engine).priv_vertObj.needsUpdate = false;
+    }
+
 
     glfwPollEvents();
-    PLCore_BeginFrame((*engine).instance, &engine->renderer, &engine->pipeline, &engine->window);
-
+    PLCore_BeginFrameAdditionalInfo additionalInfo;
+    additionalInfo.beginStage = BEGIN_FRAME_FROM_BEGINNING;
+    //PLCore_BeginFrame((*engine).instance, &engine->renderer, &engine->pipeline, &engine->window, &additionalInfo);
+    PLCore_BeginFrame((*engine).instance, &engine->renderer, &engine->pipeline, &engine->window, VK_NULL_HANDLE);
     VkCommandBuffer activeBuffer = PLCore_ActiveRenderBuffer(engine->renderer);
+
     vkCmdBindPipeline(activeBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, engine->pipeline.pipeline);
+
 
     if (engine->priv_vertObj.vertices != VK_NULL_HANDLE) {
         const VkDeviceSize vertexOffsets[] = {0};
-        //engine->priv_vertObj.vertexBuffer = PLCore_CreateGPUBuffer(engine->instance, sizeof(PLCore_Vertex) * engine->priv_vertObj.vertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, engine->priv_vertObj.vertices);
+        //(*engine).priv_vertObj.vertexBuffer = PLCore_CreateGPUBuffer(engine->instance, sizeof(PLCore_Vertex) * engine->priv_vertObj.vertexCount, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, engine->priv_vertObj.vertices);
         vkCmdBindVertexBuffers(activeBuffer, 0, 1, &engine->priv_vertObj.vertexBuffer.buffer, vertexOffsets);
     }
-
 
     return !glfwWindowShouldClose(engine->window.window);
 }
@@ -91,7 +106,13 @@ void ENGINE_PREFIX(WS_, BindDescriptors)(WS_Engine* engine) {
 
 }
 void ENGINE_PREFIX(WS_, StopRenderLoop)(WS_Engine* engine) {
-    PLCore_EndFrame(engine->instance, &engine->renderer, &engine->pipeline, &engine->window);
+    PLCore_EndFrameAdditionalInfo additionalInfo;
+    additionalInfo.additionalSemaphoreCountWait = 1;
+    additionalInfo.additionalSemaphoresWait = &engine->priv_vertObj.updateSemaphore;
+    additionalInfo.additionalSemaphoreCountSignal = 0;
+    additionalInfo.additionalSemaphoresSignal = VK_NULL_HANDLE;
+    PLCore_EndFrame(engine->instance, &engine->renderer, &engine->pipeline, &engine->window, &additionalInfo);
+    //PLCore_EndFrame(engine->instance, &engine->renderer, &engine->pipeline, &engine->window, VK_NULL_HANDLE);
 }
 
 void ENGINE_PREFIX(WS_, CreateVertexBuffer)(WS_Engine* engine) {
@@ -100,12 +121,18 @@ void ENGINE_PREFIX(WS_, CreateVertexBuffer)(WS_Engine* engine) {
     (*engine).priv_vertObj.vertices = malloc(sizeof(PLCore_Vertex) * engine->priv_vertObj.bufferMaxCount);
     (*engine).priv_vertObj.msTillUpdate = 16;
     (*engine).priv_vertObj.updateTimer = clock();
+    (*engine).priv_vertObj.needsUpdate = false;
     (*engine).priv_vertObj.vertexBuffer = PLCore_CreateGPUBuffer(engine->instance,
                                                                sizeof(PLCore_Vertex) * engine->priv_vertObj.bufferMaxCount,
                                                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                                                                engine->priv_vertObj.vertices);
-}
+    VkSemaphoreCreateInfo semaphoreInfo;
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    semaphoreInfo.pNext = VK_NULL_HANDLE;
+    semaphoreInfo.flags = 0;
+    vkCreateSemaphore(engine->instance.pl_device.device, &semaphoreInfo, VK_NULL_HANDLE, &(*engine).priv_vertObj.updateSemaphore);
 
+}
 
 PLCore_Vertex* ENGINE_PREFIX(WS_, NewQuad)(WS_Engine* engine, float x, float y, float z, float w, float h, uint32_t id) {
     PLCore_Vertex vertices[] = {
@@ -121,5 +148,11 @@ PLCore_Vertex* ENGINE_PREFIX(WS_, NewQuad)(WS_Engine* engine, float x, float y, 
     (*engine).priv_vertObj.vertices[engine->priv_vertObj.vertexCount+3] = vertices[3];
     (*engine).priv_vertObj.vertexCount += 4;
 
+    (*engine).priv_vertObj.needsUpdate = true;
+
     return pVertLoc;
+}
+
+void ENGINE_PREFIX(WS_, Draw)(WS_Engine* engine) {
+    vkCmdDraw(PLCore_ActiveRenderBuffer(engine->renderer), engine->priv_vertObj.vertexCount, 1, 0, 0);
 }
