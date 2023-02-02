@@ -1120,8 +1120,6 @@ PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PL
     PLCore_Priv_AddVertexInputToPipelineBuilder(&builder, vertexInput);
     PLCore_Priv_AddPipelineLayoutToPipelineBuilder(&builder, pipeline.layout);
 
-
-    pipeline.pl_builder = builder;
     pipeline.pipeline = PLCore_Priv_CreatePipelineFromBuilder(instance.pl_device.device, &builder, &pipeline.layout);
     return pipeline;
 }
@@ -1293,7 +1291,7 @@ void PLCore_BeginFrame(PLCore_RenderInstance instance, PLCore_Renderer* renderer
     if (additionalInfo == VK_NULL_HANDLE || additionalInfo->beginStage != RENDERPASS_START) {
         VkResult imageAcquireResult = vkAcquireNextImageKHR(instance.pl_device.device, renderer->swapchain, UINT64_MAX, (*renderer).priv_waitSemaphores[renderer->priv_activeFrame], VK_NULL_HANDLE, &(*renderer).priv_imageIndex);
         if (imageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
-            printf("Out Of Date Render Objects!\n");
+            printf("Rebuilding Render Objects\n");
             PLCore_RecreateRenderObjects(instance, renderer, pipeline, window);
         }
 
@@ -1918,14 +1916,22 @@ PLCore_DescriptorSet PLCore_CreateDescriptorSets(VkDevice device, VkDescriptorTy
     return descriptorSet;
 }
 
-void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo) {
+void PLCore_UpdateDescriptor(
+        PLCore_RenderInstance instance,
+        VkDescriptorSet set,
+        VkDescriptorType type,
+        uint32_t dstBinding,
+        VkDescriptorBufferInfo* bufferInfo,
+        VkDescriptorImageInfo* imageInfo,
+        PLCore_DescriptorAdditionalInfo* additionalInfo)
+{
     VkWriteDescriptorSet write;
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     write.pNext = VK_NULL_HANDLE;
     write.dstSet = set;
     write.dstBinding = dstBinding;
-    write.dstArrayElement = 0;
-    write.descriptorCount = 1;
+    write.dstArrayElement = (additionalInfo == VK_NULL_HANDLE) ? 0 : additionalInfo->setOffset;
+    write.descriptorCount = (additionalInfo == VK_NULL_HANDLE) ? 1 : additionalInfo->setArrayCount;
     write.descriptorType = type;
     write.pImageInfo = imageInfo;
     write.pBufferInfo = bufferInfo;
@@ -2273,8 +2279,10 @@ PLCore_DescriptorSet* PLCore_CreateDescriptorSetFromShader(PLCore_RenderInstance
             bindings[j].descriptorCount = descriptorInfos[i]->bindings[j]->count;
             bindings[j].binding = descriptorInfos[i]->bindings[j]->binding;
             bindings[j].descriptorType = (VkDescriptorType)descriptorInfos[i]->bindings[j]->descriptor_type;
+            sets[i].type = (VkDescriptorType)descriptorInfos[i]->bindings[j]->descriptor_type;
             bindings[j].pImmutableSamplers = VK_NULL_HANDLE;
             bindings[j].stageFlags = shader.stage;
+            sets[i].name = descriptorInfos[i]->bindings[j]->name;
             //printf("Shader Descriptor: [\"%s\"]:\n\t Set: %i  |  Count: %i\n", descriptorInfos[i]->bindings[j]->name, descriptorInfos[i]->bindings[j]->set, descriptorInfos[i]->bindings[j]->count);
         }
         sets[i].set = PLCore_CreateDescriptorSetAdvanced(instance, allcationPool, descriptorInfos[i]->binding_count, bindings, shader.stage, &sets[i].layout);

@@ -11,7 +11,6 @@ layout(set = 1, binding = 1) uniform texture2D textures[8];
 
 
 void main() {
-    outColor = inColor;
     if (inTexId == 0)
         outColor = inColor;
     else

@@ -92,6 +92,8 @@ typedef struct {
     VkDescriptorSet set;
     VkWriteDescriptorSet* writes;
     uint32_t slot;
+    VkDescriptorType type;
+    const char* name;
 } PLCore_DescriptorSet;
 typedef struct {
     VkSwapchainKHR swapchain;           // Framebuffer Organiser
@@ -154,7 +156,11 @@ typedef struct {
 PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t descriptorSlot, VkDescriptorType* types, uint32_t* descriptorSetCount, uint32_t count, uint32_t maxDescriptorSets, VkShaderStageFlagBits shaderStage);
 PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolFromAllocator(VkDevice device, PLCore_DescriptorPoolAllocator allocator);
 PLCore_DescriptorSet PLCore_CreateDescriptorSets(VkDevice device, VkDescriptorType typeFlags, PLCore_DescriptorPoolAllocator allocator);
-void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo);
+typedef struct {
+    uint32_t setOffset;
+    uint32_t setArrayCount;
+} PLCore_DescriptorAdditionalInfo;
+void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo, PLCore_DescriptorAdditionalInfo* additionalInfo);
 
 VkDescriptorSetLayoutBinding PLCore_CreateDescriptorSetLayoutBinding(uint32_t slot, uint32_t count, VkDescriptorType type, VkShaderStageFlags stage);
 VkDescriptorSet PLCore_CreateDescriptorSetAdvanced(PLCore_RenderInstance instance, VkDescriptorPool pool, uint32_t bindingCount, VkDescriptorSetLayoutBinding* bindings, VkShaderStageFlags stage, VkDescriptorSetLayout* layout);
@@ -200,7 +206,6 @@ typedef struct {
 typedef struct {
     VkPipeline pipeline;
     VkPipelineLayout layout;
-    PLCore_PipelineBuilder pl_builder;
 } PLCore_GraphicsPipeline;
 typedef struct {
     VkBuffer buffer;
@@ -215,34 +220,6 @@ typedef struct {
     PLCore_Image image;
     VkDescriptorImageInfo imageInfo;
 } PLCore_Texture;
-
-/*
-typedef struct {
-    uint32_t maxAllocations;
-    uint32_t currentAllocations;
-    VkDescriptorPool pool;
-} PLCore_DescriptorPool;
-typedef struct {
-    VkDescriptorSetLayout* layouts;
-    VkDescriptorSet* sets;
-    uint32_t count;
-} PLCore_Descriptor;
-*/
-
-#ifdef PLCORE_REFLECTION
-
-    SpvReflectInterfaceVariable** PLCore_ShaderReflectInputVariables(PLCore_ShaderModule shaderModule, uint32_t* count);
-    SpvReflectDescriptorSet** PLCore_ShaderReflectDescriptorSets(PLCore_ShaderModule shaderModule, uint32_t* count);
-    SpvReflectBlockVariable** PLCore_ShaderReflectPushConstants(PLCore_ShaderModule shaderModule, uint32_t* count);
-
-    inline void PLCore_Priv_PrintReflectionInputVariables(SpvReflectInterfaceVariable** vars, uint32_t varCount) {}
-    void PLCore_Priv_PrintReflectionDescriptorSets(SpvReflectDescriptorSet** sets, uint32_t setCount);
-/*
-    // DEPRECATED: Shader Reflection Is Not Working
-    VkPipelineLayout PLCore_CreatePipelineLayoutFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule* shaderModules, uint32_t shaderCount, PLCore_Descriptor** descriptorLayouts, uint32_t* descriptorLayoutCount);
-*/
-#endif
-
 
 
 VkInstance              PLCore_Priv_CreateInstance(VkDebugUtilsMessengerEXT* messenger);
