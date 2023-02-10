@@ -1099,6 +1099,8 @@ PLCore_Renderer PLCore_CreateRenderer(PLCore_RenderInstance instance, PLCore_Win
 }
 PLCore_GraphicsPipeline PLCore_CreatePipeline(PLCore_RenderInstance instance, PLCore_Renderer renderer, VkPipelineVertexInputStateCreateInfo vertexInput, PLCore_ShaderModule vertexShader, PLCore_ShaderModule fragmentShader, VkPipelineLayout* layout) {
     PLCore_GraphicsPipeline pipeline;
+    printf("\n -- Unused Field In PLCore_GraphicsPipeline, Initialized Field As NULL At Line %u\n\n", __LINE__ + 1);
+    pipeline.descriptorSets = VK_NULL_HANDLE;
     PLCore_PipelineBuilder builder = PLCore_Priv_CreateBlankPipelineBuilder();
 
     VkPipelineShaderStageCreateInfo shaders[] = {
@@ -1930,13 +1932,14 @@ void PLCore_UpdateDescriptor(
     write.pNext = VK_NULL_HANDLE;
     write.dstSet = set;
     write.dstBinding = dstBinding;
-    write.dstArrayElement = (additionalInfo == VK_NULL_HANDLE) ? 0 : additionalInfo->setOffset;
-    write.descriptorCount = (additionalInfo == VK_NULL_HANDLE) ? 1 : additionalInfo->setArrayCount;
+    write.dstArrayElement = (additionalInfo == VK_NULL_HANDLE) ? 0 : additionalInfo->arrayOffset;
+    write.descriptorCount = (additionalInfo == VK_NULL_HANDLE) ? 1 : additionalInfo->arrayCount;
     write.descriptorType = type;
     write.pImageInfo = imageInfo;
     write.pBufferInfo = bufferInfo;
     write.pTexelBufferView = VK_NULL_HANDLE;
 
+    printf("Updating Set With Type: %i\n", (int)type);
     vkUpdateDescriptorSets(instance.pl_device.device, 1, &write, 0, VK_NULL_HANDLE);
 }
 
@@ -2258,6 +2261,7 @@ VkDescriptorSet PLCore_CreateDescriptorSet(PLCore_RenderInstance instance, VkDes
 }
 
 PLCore_DescriptorSet* PLCore_CreateDescriptorSetFromShader(PLCore_RenderInstance instance, PLCore_ShaderModule shader, VkDescriptorPool allcationPool, uint32_t* out_DescriptorCount) {
+
     SpvReflectShaderModule mod;
     spvReflectCreateShaderModule(shader.size, shader.buffer, &mod);
 
@@ -2272,33 +2276,48 @@ PLCore_DescriptorSet* PLCore_CreateDescriptorSetFromShader(PLCore_RenderInstance
 
     for (int i = 0; i < descriptorCount; i++) {
         sets[i].slot = descriptorInfos[i]->set;
-        sets[i].writes = malloc(sizeof(VkWriteDescriptorSet) * descriptorInfos[i]->binding_count);
+        sets[i].bindings = malloc(sizeof(PLCore_DescriptorBinding) * descriptorInfos[i]->binding_count);
+        sets[i].bindingCount = descriptorInfos[i]->binding_count;
         //descriptorInfos[i]; this is the set
         VkDescriptorSetLayoutBinding* bindings = malloc(sizeof(VkDescriptorSetLayoutBinding) * descriptorInfos[i]->binding_count);
         for (int j = 0; j < descriptorInfos[i]->binding_count; j++) {
-            bindings[j].descriptorCount = descriptorInfos[i]->bindings[j]->count;
-            bindings[j].binding = descriptorInfos[i]->bindings[j]->binding;
-            bindings[j].descriptorType = (VkDescriptorType)descriptorInfos[i]->bindings[j]->descriptor_type;
-            sets[i].type = (VkDescriptorType)descriptorInfos[i]->bindings[j]->descriptor_type;
+            sets[i].bindings[j].arrayCount =
+                    bindings[j].descriptorCount = descriptorInfos[i]->bindings[j]->count;
+            sets[i].bindings[j].bindingSlot =
+                    bindings[j].binding = descriptorInfos[i]->bindings[j]->binding;
+            sets[i].bindings[j].type =
+                    bindings[j].descriptorType = (VkDescriptorType)descriptorInfos[i]->bindings[j]->descriptor_type;
+            sets[i].bindings[j].name =
+                    descriptorInfos[i]->bindings[j]->name;
             bindings[j].pImmutableSamplers = VK_NULL_HANDLE;
             bindings[j].stageFlags = shader.stage;
-            sets[i].name = descriptorInfos[i]->bindings[j]->name;
+
             //printf("Shader Descriptor: [\"%s\"]:\n\t Set: %i  |  Count: %i\n", descriptorInfos[i]->bindings[j]->name, descriptorInfos[i]->bindings[j]->set, descriptorInfos[i]->bindings[j]->count);
+
+            sets[i].bindings[j].write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            sets[i].bindings[j].write.pNext = VK_NULL_HANDLE;
+            // The Set To Update Does Not Currently Exist So We Need To Save `dstSet` Member For Later
+            sets[i].bindings[j].write.dstBinding = bindings[j].binding;
+            sets[i].bindings[j].write.dstArrayElement = 0;
+            sets[i].bindings[j].write.descriptorCount = bindings[j].descriptorCount;
+            sets[i].bindings[j].write.descriptorType = bindings[j].descriptorType;
+            sets[i].bindings[j].write.pImageInfo = VK_NULL_HANDLE;
+            sets[i].bindings[j].write.pBufferInfo = VK_NULL_HANDLE;
+            sets[i].bindings[j].write.pTexelBufferView = VK_NULL_HANDLE;
         }
         sets[i].set = PLCore_CreateDescriptorSetAdvanced(instance, allcationPool, descriptorInfos[i]->binding_count, bindings, shader.stage, &sets[i].layout);
-        for (int j = 0; j < descriptorInfos[i]->binding_count; j++) {
-            sets[i].writes[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            sets[i].writes[j].pNext = VK_NULL_HANDLE;
-            sets[i].writes[j].dstSet = sets[i].set;
-            sets[i].writes[j].dstBinding = bindings[j].binding;
-            sets[i].writes[j].dstArrayElement = 0;
-            sets[i].writes[j].descriptorCount = bindings[j].descriptorCount;
-            sets[i].writes[j].descriptorType = bindings[j].descriptorType;
-            sets[i].writes[j].pImageInfo = VK_NULL_HANDLE;
-            sets[i].writes[j].pBufferInfo = VK_NULL_HANDLE;
-            sets[i].writes[j].pTexelBufferView = VK_NULL_HANDLE;
+        for (int j  = 0; j < descriptorInfos[i]->binding_count; j++)
+            sets[i].bindings[j].write.dstSet = sets[i].set;
+    }
+    for (int i = 0; i < descriptorCount; i++) {
+        printf("Creating Descriptors From Shader '%s'  |  Binding Count: %i\n", shader.path, sets[i].bindingCount);
+        for (int j = 0; j < sets[i].bindingCount; j++) {
+            printf("\tName: '%s'\n\t\tArray Count: %i\n",
+                   sets[i].bindings[j].name,
+                   sets[i].bindings[j].arrayCount);
         }
     }
+
     return sets;
 }
 

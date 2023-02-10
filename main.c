@@ -130,39 +130,64 @@ int main() {
             PLCore_CreateTexture(engine.instance, engine.renderer, "D:\\Plutonium\\Assets\\ps5.jpg")
     };
 
-    WS_UniformI(&engine, "textureSampler", sampler.samplerInfo, VK_NULL_HANDLE);
-    PLCore_DescriptorAdditionalInfo textureInfos;
-    textureInfos.setOffset = 1;
-    textureInfos.setArrayCount = 1; // textures (PLCore_Texture type) count
-    WS_UniformI(&engine, "textures", textures[0].imageInfo, &textureInfos);
+/*
+    VkWriteDescriptorSet writes[2];
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].pNext = VK_NULL_HANDLE;
+    writes[0].dstSet = engine.descriptorSets[1];
+    writes[0].dstBinding = 0;
+    writes[0].dstArrayElement = 0;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    writes[0].pImageInfo = &sampler.samplerInfo;
+    writes[0].pBufferInfo = VK_NULL_HANDLE;
+    writes[0].pTexelBufferView = VK_NULL_HANDLE;
+
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].pNext = VK_NULL_HANDLE;
+    writes[1].dstSet = engine.descriptorSets[1];
+    writes[1].dstBinding = 1;
+    writes[1].dstArrayElement = 0;
+    writes[1].descriptorCount = 1;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    writes[1].pImageInfo = &textures->imageInfo;
+    writes[1].pBufferInfo = VK_NULL_HANDLE;
+    writes[1].pTexelBufferView = VK_NULL_HANDLE;
 
     //WS_UniformW(&engine, "textures", writes, 2);
-
+    vkUpdateDescriptorSets(engine.instance.pl_device.device, 2, writes, 0, VK_NULL_HANDLE);
+*/
+    WS_UniformI(&engine, "textureSampler", sampler.samplerInfo, VK_NULL_HANDLE);
+    WS_UniformI(&engine, "textures", textures->imageInfo, VK_NULL_HANDLE);
 
     // Make Texture Work!
 
     PLCore_Vertex vertices[3] = {
-            { { -0.5f, -0.5f,  0.0f }, { 1.0f, 0.0f, 0.0f }, {0.0f, 0.0f}, 0},
-            { { -0.5f,  0.5f,  0.0f }, { 0.0f, 1.0f, 0.0f }, {0.0f, 0.0f}, 0},
-            { {  0.5f,  0.5f,  0.0f }, { 0.0f, 0.0f, 1.0f }, {0.0f, 0.0f}, 0}
+            { { -0.5f, -0.5f,  0.0f }, { 1.0f, 0.0f, 0.0f }, {0.0f, 0.0f}, 1},
+            { { -0.5f,  0.5f,  0.0f }, { 0.0f, 1.0f, 0.0f }, {0.0f, 0.0f}, 1},
+            { {  0.5f,  0.5f,  0.0f }, { 0.0f, 0.0f, 1.0f }, {0.0f, 0.0f}, 1}
     };
     WS_NewGeometry(&engine, vertices, 3);
 
+    PLCore_PollCameraMovements(engine.window, &camera, keybinds);
+
+    VkDescriptorBufferInfo cameraInfo;
+    cameraInfo.offset = 0;
+    cameraInfo.buffer = uniformBuffers[engine.renderer.priv_activeFrame % 2].buffer;
+    cameraInfo.range = sizeof(PLCore_CameraUniform);
+    WS_UniformB(&engine, "ubo", cameraInfo, VK_NULL_HANDLE);
+
+
     int loop = 0;
-    while (WindowInValidState(&engine) && loop <= 10) {
+    bool debugRuntime = false;
+    while (WindowInValidState(&engine)) {
+        if (debugRuntime && loop >= 5) { break; }
         WS_StartFrame(&engine);
 
-        PLCore_PollCameraMovements(engine.window, &camera, keybinds);
 
-        VkDescriptorBufferInfo cameraInfo;
-        cameraInfo.offset = 0;
-        cameraInfo.buffer = uniformBuffers[engine.renderer.priv_activeFrame].buffer;
-        cameraInfo.range = sizeof(PLCore_CameraUniform);
-        WS_UniformB(&engine, "ubo", cameraInfo, VK_NULL_HANDLE);
 
 
         WS_RenderGeometry(&engine);
-
 
         WS_EndFrame(&engine);
         loop++;

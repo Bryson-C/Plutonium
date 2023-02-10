@@ -172,7 +172,7 @@ ReturnResult ENGINE_PREFIX(WS_, Start)(Engine* engine,
     //for (int i = 0; i < engine->descriptorSetCount; i++)
         //(*engine).descriptorNames[i] = (char*)malloc(sizeof(char) * MAX_DESCRIPTOR_NAME_SIZE);
 
-
+    printf("Shader Variable Count: %i\n", engine->descriptorSetCount);
     for (int i = 0, descriptorIndex = 0; i < engine->descriptorSetCount; i++) {
         if (i < vShader.descriptorSetCount) {
             (*engine).descriptors[i] = vShader.descriptorSets[descriptorIndex];
@@ -196,7 +196,8 @@ ReturnResult ENGINE_PREFIX(WS_, Start)(Engine* engine,
     }
 
     for (int i = 0; i < engine->descriptorSetCount; i++) {
-        printf("Shader Variable: %s\n", engine->descriptors[i].name);
+        for (int j = 0; j < engine->descriptors[i].bindingCount; j++)
+            printf("Shader Variable: %s\n", engine->descriptors[i].bindings[j].name);
     }
 
     VkPipelineLayout pipelineLayout = PLCore_Priv_CreatePipelineLayout(
@@ -237,16 +238,21 @@ ReturnResult ENGINE_PREFIX(WS_, EndFrame)(Engine* engine) {
     PLCore_EndFrame(engine->instance, &engine->renderer, &engine->pipeline, &engine->window, VK_NULL_HANDLE);
     return SuccessfulReturn();
 }
-static ReturnResult GetUniformByName(Engine* engine, const char* name, uint32_t* retOffset) {
+static ReturnResult GetUniformByName(Engine* engine, const char* name, uint32_t* retOffset, uint32_t* bindingSlot) {
 
     // go through engine descriptors name list
     // find `name` in list
     // set value of found descriptor to `value`
 
     for (int i = 0; i < engine->descriptorSetCount; i++) {
-        if (strcmp(engine->descriptors[i].name, name) == 0) {
-            *retOffset = i;
-            return SuccessfulReturn();
+
+        for (int j = 0; j < engine->descriptors[i].bindingCount; j++) {
+            if (strcmp(engine->descriptors[i].bindings[j].name, name) == 0) {
+                *retOffset = i;
+                if (bindingSlot != VK_NULL_HANDLE)
+                    *bindingSlot = engine->descriptors[i].bindings[j].bindingSlot;
+                return SuccessfulReturn();
+            }
         }
     }
     return FailureReturn();
@@ -254,13 +260,13 @@ static ReturnResult GetUniformByName(Engine* engine, const char* name, uint32_t*
 }
 ReturnResult ENGINE_PREFIX(WS_, GetUniform)(Engine* engine, const char* name, PLCore_DescriptorSet* retDescriptor) {
     uint32_t descriptorOffset = 0;
-    ReturnResult result = GetUniformByName(engine, name, &descriptorOffset);
+    ReturnResult result = GetUniformByName(engine, name, &descriptorOffset, VK_NULL_HANDLE);
     *retDescriptor = engine->descriptors[descriptorOffset];
     return result;
 }
 ReturnResult ENGINE_PREFIX(WS_, UniformW)(Engine* engine, const char* name, VkWriteDescriptorSet* writes, uint32_t writeCount) {
     uint32_t descriptorOffset = 0;
-    ReturnResult result = GetUniformByName(engine, name, &descriptorOffset);
+    ReturnResult result = GetUniformByName(engine, name, &descriptorOffset, VK_NULL_HANDLE);
 
     vkUpdateDescriptorSets(engine->instance.pl_device.device, writeCount, writes, 0, VK_NULL_HANDLE);
 
@@ -268,24 +274,50 @@ ReturnResult ENGINE_PREFIX(WS_, UniformW)(Engine* engine, const char* name, VkWr
 }
 ReturnResult ENGINE_PREFIX(WS_,UniformB)(Engine* engine, const char* name, VkDescriptorBufferInfo bufferInfo, PLCore_DescriptorAdditionalInfo* additionalInfo) {
     uint32_t descriptorOffset = 0;
-    ReturnResult result = GetUniformByName(engine, name, &descriptorOffset);
-    PLCore_UpdateDescriptor(engine->instance,
+    uint32_t bindingSlot = 0;
+    ReturnResult result = GetUniformByName(engine, name, &descriptorOffset, &bindingSlot);
+    if (result.value == RETURN_FAILURE)
+        fprintf(stderr, "Failed Retrieving Descriptor Set '%s'", name);
+
+    (*engine).descriptors[descriptorOffset].bindings[bindingSlot].write.pBufferInfo = &bufferInfo;
+
+    vkUpdateDescriptorSets(engine->instance.pl_device.device,
+                            // We Can Only Take 1 Buffer/Image Info Structure So We Can Only Update 1 Descriptor Binding At A Time
+                           1,
+                           &engine->descriptors[descriptorOffset].bindings[bindingSlot].write,
+                           0,
+                           VK_NULL_HANDLE);
+
+    /*PLCore_UpdateDescriptor(engine->instance,
                             engine->descriptors[descriptorOffset].set,
                             engine->descriptors[descriptorOffset].type,
                             engine->descriptors[descriptorOffset].slot,
-                            &bufferInfo, VK_NULL_HANDLE, additionalInfo);
+                            &bufferInfo, VK_NULL_HANDLE, additionalInfo);*/
     return result;
 }
 ReturnResult ENGINE_PREFIX(WS_,UniformI)(Engine* engine, const char* name, VkDescriptorImageInfo imageInfo, PLCore_DescriptorAdditionalInfo* additionalInfo) {
     uint32_t descriptorOffset = 0;
-    ReturnResult result = GetUniformByName(engine, name, &descriptorOffset);
-    PLCore_UpdateDescriptor(engine->instance,
-                            engine->descriptors[descriptorOffset].set,
-                            engine->descriptors[descriptorOffset].type,
-                            engine->descriptors[descriptorOffset].slot,
-                            VK_NULL_HANDLE, &imageInfo, additionalInfo);
+    uint32_t bindingSlot = 0;
+    ReturnResult result = GetUniformByName(engine, name, &descriptorOffset, &bindingSlot);
+    if (result.value == RETURN_FAILURE)
+        fprintf(stderr, "Failed Retrieving Descriptor Set '%s'", name);
+
+    printf("%s belongs to binding %i of descriptor\n", name, bindingSlot);
+
+    ((*engine).descriptors[descriptorOffset].bindings[bindingSlot].write.pImageInfo) = &imageInfo;
+
+    printf("SType: %i\n", engine->descriptors[descriptorOffset].bindings[bindingSlot].write.sType);
+
+    vkUpdateDescriptorSets(engine->instance.pl_device.device,
+                           // We Can Only Take 1 Buffer/Image Info Structure So We Can Only Update 1 Descriptor Binding At A Time
+                           1,
+                           &engine->descriptors[descriptorOffset].bindings[bindingSlot].write,
+                           0,
+                           VK_NULL_HANDLE);
+
     return result;
 }
+
 static PLCore_Buffer TEST_engineVertexBuffer;
 static bool TEST_rebuildEngineVertexBuffer = true;
 static uint32_t TEST_vertexCount = 0;

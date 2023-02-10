@@ -86,14 +86,19 @@ typedef struct {
     // Data Structures
     VkDescriptorPool pool;
 } PLCore_DescriptorPoolAllocator;
-
+typedef struct {
+    uint32_t bindingSlot;
+    uint32_t arrayCount;
+    VkDescriptorType type;
+    VkWriteDescriptorSet write;
+    const char* name;
+} PLCore_DescriptorBinding;
 typedef struct {
     VkDescriptorSetLayout layout;
     VkDescriptorSet set;
-    VkWriteDescriptorSet* writes;
     uint32_t slot;
-    VkDescriptorType type;
-    const char* name;
+    PLCore_DescriptorBinding* bindings;
+    uint32_t bindingCount;
 } PLCore_DescriptorSet;
 typedef struct {
     VkSwapchainKHR swapchain;           // Framebuffer Organiser
@@ -157,8 +162,8 @@ PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolAllocator(uint32_t des
 PLCore_DescriptorPoolAllocator PLCore_CreateDescriptorPoolFromAllocator(VkDevice device, PLCore_DescriptorPoolAllocator allocator);
 PLCore_DescriptorSet PLCore_CreateDescriptorSets(VkDevice device, VkDescriptorType typeFlags, PLCore_DescriptorPoolAllocator allocator);
 typedef struct {
-    uint32_t setOffset;
-    uint32_t setArrayCount;
+    uint32_t arrayOffset;
+    uint32_t arrayCount;
 } PLCore_DescriptorAdditionalInfo;
 void PLCore_UpdateDescriptor(PLCore_RenderInstance instance, VkDescriptorSet set, VkDescriptorType type, uint32_t dstBinding, VkDescriptorBufferInfo* bufferInfo, VkDescriptorImageInfo* imageInfo, PLCore_DescriptorAdditionalInfo* additionalInfo);
 
@@ -206,6 +211,9 @@ typedef struct {
 typedef struct {
     VkPipeline pipeline;
     VkPipelineLayout layout;
+
+    PLCore_DescriptorSet* descriptorSets;
+
 } PLCore_GraphicsPipeline;
 typedef struct {
     VkBuffer buffer;
